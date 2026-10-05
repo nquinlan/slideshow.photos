@@ -14,6 +14,7 @@
  */
 import type { PlaybackSettings } from '../db/db';
 import { effectiveFormat } from '../formats';
+import { shuffledOrder } from '../formats/shared';
 import {
   resolveSettings,
   type FormatInstance,
@@ -54,14 +55,7 @@ export interface EngineOptions {
   clearTimer?: (h: unknown) => void;
 }
 
-export function shuffledOrder(n: number, random: () => number = Math.random): number[] {
-  const a = Array.from({ length: n }, (_, i) => i);
-  for (let i = n - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+export { shuffledOrder };
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
@@ -258,7 +252,9 @@ export class SlideshowEngine {
 
   private computeFormatKey() {
     const f = effectiveFormat(this.o.settings.formatId, this.o.reducedMotion);
-    return JSON.stringify([f.id, resolveSettings(f.settingsSchema, this.o.settings.formatSettings[f.id])]);
+    // Scenes that use shuffle read it at creation, so a change restarts them.
+    const shuffle = f.kind === 'scene' && f.uses.shuffle ? this.o.settings.shuffle : null;
+    return JSON.stringify([f.id, resolveSettings(f.settingsSchema, this.o.settings.formatSettings[f.id]), shuffle]);
   }
 
   private createFormat() {
@@ -276,6 +272,7 @@ export class SlideshowEngine {
           ...ctx,
           library: this.library,
           timing: this.timing(),
+          shuffle: this.o.settings.shuffle,
           random: this.o.random ?? Math.random,
           onStatus: (s) => {
             if (scene !== this.scene) return;

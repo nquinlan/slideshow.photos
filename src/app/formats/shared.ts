@@ -103,6 +103,16 @@ function drawBlurBackdrop(ctx: CanvasRenderingContext2D, img: SlideImage, W: num
   ctx.fillRect(0, 0, W, H);
 }
 
+/** Fisher–Yates permutation of 0..n-1. */
+export function shuffledOrder(n: number, random: () => number = Math.random): number[] {
+  const a = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export const EASINGS = {
   linear: (t: number) => t,
   'ease-in-out-sine': (t: number) => -(Math.cos(Math.PI * t) - 1) / 2,

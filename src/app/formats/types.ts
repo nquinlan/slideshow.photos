@@ -157,6 +157,8 @@ export interface SceneStatus {
 export interface SceneContext extends FormatContext {
   library: PhotoLibrary;
   timing: SceneTiming;
+  /** Global shuffle setting (for scenes whose `uses.shuffle` is true). */
+  shuffle: boolean;
   random: () => number;
   onStatus(status: SceneStatus): void;
 }

@@ -130,9 +130,9 @@ export interface PlaybackSettings {
 }
 
 export const DEFAULT_PLAYBACK: PlaybackSettings = {
-  formatId: 'sliding-tiles',
-  intervalSec: 6,
-  transitionMs: 1400,
+  formatId: 'sliding-panels',
+  intervalSec: 5,
+  transitionMs: 900,
   shuffle: false,
   fit: 'contain',
   backdrop: 'blur',
