@@ -42,9 +42,13 @@ Requires Node 22+.
 
 **What users are asked for:** the single read-only scope above. It only covers items the user picks in Google's picker. Tokens last about 1 hour, are kept in memory only, and can't be silently refreshed without a backend. Imports are therefore bounded sessions: the app shows the time left, pauses if access expires, and offers "Sign in and resume".
 
-### ⚠️ Google Photos download in a browser-only app (open issue)
+### Google Photos download works browser-only
 
-The Picker API itself works from the browser. Downloading the picked photo bytes probably does not with the documented `Authorization` header, because Google's media host doesn't allow that header in CORS preflights. Run `npm run spike` with your client ID to confirm which download method works. **`spike/README.md` has the evidence, what each result means, and the options**, including what a minimal serverless proxy involves. No proxy has been added.
+Verified with the spike on 2026-10-05 (`spike/README.md` has the details):
+
+- The documented `Authorization: Bearer` download works directly from the browser, so no proxy or backend is needed.
+- Sized renditions of HEIC originals arrive as JPEG.
+- Picker sessions last 7 days, so an import can resume after the 1-hour token expires by signing in again.
 
 ## Architecture
 

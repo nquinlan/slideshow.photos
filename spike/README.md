@@ -1,30 +1,26 @@
 # Milestone 0 spike: Google Photos Picker in a browser-only app
 
-## Status: blocked pending one test in a real browser
+## Status: ✅ works browser-only, no backend needed (verified 2026-10-05)
 
-Everything up to the download step works from a static page. The download step itself is very likely blocked by CORS for the documented method, and two fallbacks still need a real-account test.
+Run in Chrome 154 from `http://localhost:5173`, with a real account and two picked iPhone HEIC photos (5712×4284 and 4284×5712).
 
-| Step | Browser-only? | Evidence |
-|---|---|---|
-| Sign in (GIS token model, `photospicker.mediaitems.readonly`) | ✅ | Standard GIS flow, no secret needed |
-| `sessions.create` / `get` / `delete`, `mediaItems.list` | ✅ | `OPTIONS https://photospicker.googleapis.com/v1/sessions` returns `access-control-allow-origin: <origin>` and `access-control-allow-headers: authorization,content-type` |
-| Open picker | ✅ | `pickerUri` + `/autoclose` in a new window (iframes aren't allowed) |
-| **Download bytes with `Authorization: Bearer`** (the documented method) | ❌ **probably blocked** | The media host `lh3.googleusercontent.com` answers a CORS preflight like a plain GET: `200`, `access-control-allow-origin: *`, but **no `Access-Control-Allow-Headers`**. A cross-origin `fetch` carrying an `Authorization` header needs `authorization` listed there, so browsers will reject it. |
-| Download with `?access_token=` (no preflight) | ❓ | Responses carry `ACAO: *`, so this works **if** the media host accepts the token as a query parameter. Untested without a real token. |
-| Download with no credentials | ❓ | Works only if Picker `baseUrl`s are capability URLs. The docs say a bearer token is required. |
+| Step | Result |
+|---|---|
+| Sign in (GIS token model, `photospicker.mediaitems.readonly`) | ✅ Token granted, `expires_in` 3599 s |
+| `sessions.create` / `get`, `mediaItems.list` | ✅ CORS works with an `Authorization` header |
+| Open picker (`pickerUri` + `/autoclose`, new window) | ✅ `mediaItemsSet` became true about 16 s after opening |
+| **A. `fetch` + `Authorization: Bearer`** (documented; the app default) | ✅ **137 KB `image/jpeg`, decoded 1024×768, 330 ms** |
+| B. `fetch` + `?access_token=` | ✅ Works too (fallback: `PUBLIC_GOOGLE_MEDIA_FETCH=query`) |
+| C, D. No credentials | Reported as working, but **not meaningful**. C took 6 ms on the same URL that A had just fetched, so it was almost certainly a browser-cache hit. Don't rely on unauthenticated access. |
 
-The preflight probe was run on 2026-10-05:
+Other things this showed:
 
-```
-curl -X OPTIONS 'https://lh3.googleusercontent.com/a/default-user=s96-c' \
-  -H 'Origin: https://example.com' -H 'Access-Control-Request-Method: GET' \
-  -H 'Access-Control-Request-Headers: authorization' -D - -o /dev/null
-HTTP/2 200
-content-type: image/png
-access-control-allow-origin: *
-access-control-expose-headers: Content-Length
-(no access-control-allow-headers, no access-control-allow-methods)
-```
+- **HEIC originals come back as JPEG.** Requesting `=w1024-h1024` returned a JPEG scaled to fit within the box, 5712×4284 → 1024×768. Google items therefore never need the WASM HEIC decoder, and originals are never downloaded.
+- **Sessions last 7 days.** `expireTime` was creation + 7 days. Polling used `pollInterval` 5 s and `timeoutIn` about 30 min. Resuming after the 1-hour token expires can reuse the same session: a fresh sign-in calls `mediaItems.list` again, which returns fresh `baseUrl`s valid for 60 minutes. This is how the app's resume works.
+
+### Why the earlier prediction was wrong
+
+Before this test, I predicted method A would be blocked. That prediction came from a CORS preflight probe against a placeholder `lh3.googleusercontent.com` path. Its response omitted `Access-Control-Allow-Headers`, which would fail an `Authorization` preflight. Real Picker `baseUrl`s evidently answer the preflight correctly. A curl probe against a placeholder path wasn't representative; only the real-account test settles it.
 
 ## Run the spike (about 5 minutes)
 
@@ -39,7 +35,7 @@ access-control-expose-headers: Content-Length
 
    Click **Copy report** to grab the log; the token is redacted.
 
-## What each outcome means
+## What each outcome means (kept for reference)
 
 - **A works:** nothing to change. This is the app default (`PUBLIC_GOOGLE_MEDIA_FETCH=header`).
 - **Only B works:** set `PUBLIC_GOOGLE_MEDIA_FETCH=query`. Still no backend. The trade-off is that the token appears in request URLs. It is short-lived and only sent to Google, but URLs can end up in the browser's own network logs.
