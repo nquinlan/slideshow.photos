@@ -1,0 +1,16 @@
+---
+import Base from '../layouts/Base.astro';
+import App from '../app/ui/App';
+import { SITE } from '../site';
+import '../app/ui/app.css';
+---
+
+<Base
+  title={`${SITE.name} — Slideshow app`}
+  description="Build a photo collection from your computer or Google Photos and play it as a full-screen slideshow. Works offline."
+  path="/app"
+  noindex
+>
+  <noscript><p class="noscript">{SITE.name} needs JavaScript to build and play slideshows.</p></noscript>
+  <App client:only="react" />
+</Base>
