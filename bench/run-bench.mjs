@@ -57,23 +57,26 @@ async function serve(context) {
 }
 
 /**
- * Install root of a Playwright browser (e.g. ".../ms-playwright/chromium_headless_shell-1243"),
- * wherever Playwright keeps browsers on this machine. All of the browser's processes
- * (renderer, GPU, network, WebKit XPC services, Firefox content processes) run from it.
+ * Path prefixes that a browser family's processes run from. Headless Chromium runs
+ * Playwright's separate chromium_headless_shell-NNNN build, not the chromium-NNNN one
+ * executablePath() points at, so we match the whole family under Playwright's
+ * browsers directory (only one browser runs at a time).
  */
-function installRoot(type) {
+function processMarkers(type, name) {
   const exe = type.executablePath();
-  const m = exe.match(/^(.*?[\\/](?:chromium|chromium_headless_shell|firefox|webkit)-\d+)(?:[\\/]|$)/);
-  return m ? m[1] : path.dirname(exe);
+  const m = exe.match(/^(.*?)[\\/](?:chromium|chromium_headless_shell|firefox|webkit)-\d+(?:[\\/]|$)/);
+  const dir = m ? m[1] : path.dirname(exe);
+  const families = { chromium: ['chromium-', 'chromium_headless_shell-'], firefox: ['firefox-'], webkit: ['webkit-'] }[name];
+  return families.map((f) => path.join(dir, f));
 }
 
-/** Sum RSS (MB) of every process whose command line points into `browserRoot`. */
-function sampleRss(browserRoot) {
+/** Sum RSS (MB) of every process whose command line starts from one of `markers`. */
+function sampleRss(markers) {
   try {
     const out = execFileSync('ps', ['-axo', 'rss=,command='], { encoding: 'utf8', maxBuffer: 1 << 24 });
     let total = 0, max = 0, count = 0;
     for (const line of out.split('\n')) {
-      if (!line.includes(browserRoot)) continue;
+      if (!markers.some((m) => line.includes(m))) continue;
       const kb = parseInt(line.trim(), 10) || 0;
       total += kb;
       max = Math.max(max, kb);
@@ -94,7 +97,7 @@ for (const name of browsers) {
     const cfg = configs[i];
     // Fresh browser per config so memory numbers are not polluted by previous runs.
     const browser = await type.launch();
-    const browserRoot = installRoot(type);
+    const markers = processMarkers(type, name);
     const context = await browser.newContext();
     await serve(context);
     const page = await context.newPage();
@@ -103,9 +106,9 @@ for (const name of browsers) {
     await page.goto(`${ORIGIN}/bench/index.html`);
     await page.waitForFunction(() => document.getElementById('log')?.textContent === 'ready', null, { timeout: 60000 });
     const caps = await page.evaluate(() => window.detectCapabilities());
-    const baseline = sampleRss(browserRoot);
+    const baseline = sampleRss(markers);
     const samples = [];
-    const timer = setInterval(() => samples.push(sampleRss(browserRoot)), 150);
+    const timer = setInterval(() => samples.push(sampleRss(markers)), 150);
     const res = await page.evaluate((c) => window.runBench(c), cfg);
     clearInterval(timer);
     await browser.close();
@@ -113,7 +116,7 @@ for (const name of browsers) {
     const sum = (k) => res.rows.reduce((a, r) => a + r[k], 0);
     const sorted = res.rows.map((r) => r.ms).sort((a, b) => a - b);
     const peak = Math.max(...samples.map((s) => s.total));
-    if (!Number.isFinite(peak)) console.warn(`[bench] could not sample memory for processes under ${browserRoot}`);
+    if (!Number.isFinite(peak)) console.warn(`[bench] could not sample memory for processes under ${markers.join(', ')}`);
     const q = Math.floor(samples.length / 4) || 1;
     const avg = (arr) => arr.reduce((a, s) => a + s.total, 0) / arr.length;
     const summary = {
