@@ -8,6 +8,7 @@ import { SITE } from '../site';
 import landingCss from '../styles/landing.css?inline';
 
 const updated = 'October 5, 2026';
+const contact = 'nick@nicholasquinlan.com';
 const title = `Privacy & terms — ${SITE.name}`;
 const description = `How ${SITE.name} handles your data (it doesn't collect any) and the terms for using it.`;
 ---
@@ -60,10 +61,13 @@ const description = `How ${SITE.name} handles your data (it doesn't collect any)
 
         <h2>Hosting</h2>
         <p>
-          This site is served by Cloudflare. Like any website, Cloudflare processes basic technical information, such as
-          your IP address, browser type and the pages requested, to deliver the site and protect it from abuse. See
-          <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare’s privacy policy</a>. We don’t
-          use this information to identify or track you.
+          This site is hosted on GitHub Pages and delivered through Cloudflare’s network. Like any website, they process
+          basic technical information, such as your IP address, browser type and the pages requested, to deliver the site
+          and protect it from abuse. See
+          <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener"
+            >GitHub’s privacy statement</a
+          > and <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare’s privacy policy</a>. We
+          don’t use this information to identify or track you.
         </p>
 
         <h2>No tracking</h2>
@@ -71,6 +75,9 @@ const description = `How ${SITE.name} handles your data (it doesn't collect any)
 
         <h2>Changes</h2>
         <p>If this policy changes, we’ll update this page and the date above.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about privacy? Email <a href={`mailto:${contact}`}>{contact}</a>.</p>
       </section>
 
       <section id="terms" aria-labelledby="terms-title">
@@ -82,6 +89,10 @@ const description = `How ${SITE.name} handles your data (it doesn't collect any)
         <p>
           {SITE.name} is free to use. Only add photos you have the right to use. They remain yours, and we get no rights
           to them.
+        </p>
+        <p>
+          Don’t use {SITE.name} for anything illegal, including showing content that is unlawful or that infringes
+          someone else’s rights, and don’t try to disrupt or misuse the site.
         </p>
 
         <h2>Your data</h2>
@@ -104,6 +115,9 @@ const description = `How ${SITE.name} handles your data (it doesn't collect any)
           We may change or discontinue {SITE.name}, or update these terms, at any time. Continuing to use it means you
           accept the current terms.
         </p>
+
+        <h2>Contact</h2>
+        <p>Questions about these terms? Email <a href={`mailto:${contact}`}>{contact}</a>.</p>
       </section>
     </div>
   </main>
