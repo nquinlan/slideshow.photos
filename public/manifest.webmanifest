@@ -1,6 +1,6 @@
 {
-  "name": "Tessera — Photo slideshows",
-  "short_name": "Tessera",
+  "name": "slideshow.photos — Photo slideshows",
+  "short_name": "slideshow.photos",
   "description": "Build a photo slideshow from files on your computer and Google Photos, then play it full-screen with animated tile transitions. Works offline. Your photos never leave your device.",
   "id": "/app",
   "start_url": "/app",

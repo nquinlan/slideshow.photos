@@ -4,7 +4,7 @@ import sitemap from '@astrojs/sitemap';
 
 // Canonical origin used for <link rel=canonical>, Open Graph URLs and sitemap.xml.
 // Set SITE_URL at build time for your real deployment.
-const site = process.env.SITE_URL ?? 'https://tessera-slideshow.example';
+const site = process.env.SITE_URL ?? 'https://slideshow.photos';
 
 export default defineConfig({
   site,

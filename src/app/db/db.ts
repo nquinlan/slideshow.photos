@@ -234,6 +234,7 @@ export class SlideshowDB extends Dexie {
   graphics!: EntityTable<Graphic, 'id'>;
   graphicFiles!: Table<GraphicFileRow, string>;
 
+  // Pre-rename name (the app was called Tessera); kept so existing libraries stay put.
   constructor(name = 'tessera') {
     super(name);
     this.version(1).stores({

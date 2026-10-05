@@ -1,10 +1,10 @@
-# Tessera: offline photo slideshows
+# slideshow.photos: offline photo slideshows
 
 A static web app (no backend). Build a photo collection from local files and Google Photos, then play it full-screen as a **Sliding Panels** collage, **Floating** photos, or a **Crossfade**. Photos are processed on the device into screen-sized WebP copies, stored in IndexedDB, and play offline.
 
 - Landing page: `/`, with no JavaScript apart from an inline service-worker registration.
 - App: `/app`, built with React.
-- "Tessera" is a placeholder product name. Change it in `src/site.ts`.
+- The product name lives in `src/site.ts`.
 
 ## Quick start
 

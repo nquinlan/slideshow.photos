@@ -15,6 +15,7 @@
 import type { Graphic, GraphicType, PlaybackSettings, Photo } from '../db/db';
 import { GRAPHIC_MIME } from '../graphics/graphics';
 
+// Pre-rename id (the app was called Tessera); kept so older backups still import.
 export const EXPORT_FORMAT = 'tessera-library';
 export const EXPORT_VERSION = 1;
 

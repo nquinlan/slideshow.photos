@@ -141,7 +141,7 @@ function ogSvg() {
   ${field}
   <rect x="640" y="0" width="300" height="${H}" fill="url(#fade)"/>
   ${mosaic({ x: 80, y: 96, size: 100 })}
-  <text x="80" y="310" font-family="${font}" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-2">${escapeXml(SITE.name)}</text>
+  <text x="80" y="310" font-family="${font}" font-size="80" font-weight="700" fill="#ffffff" letter-spacing="-2">${escapeXml(SITE.name)}</text>
   ${tagline}
   <text x="80" y="${360 + taglineLines.length * 56 + 40}" font-family="${font}" font-size="28" fill="${TILES[0]}">Free · Works offline · Photos stay on your device</text>
 </svg>`;
