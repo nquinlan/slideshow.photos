@@ -1,0 +1,486 @@
+---
+/**
+ * Marketing landing page. Fully static: no framework islands and no imports from
+ * src/app, so the app bundle stays off this page's critical path. The only
+ * client JS is the tiny inline service-worker registration at the end of <body>.
+ */
+import Base from '../layouts/Base.astro';
+import { SITE } from '../site';
+// Inlined into <head> (processed + minified by Vite) to avoid a render-blocking request.
+import landingCss from '../styles/landing.css?inline';
+
+const app = SITE.appPath;
+const title = `${SITE.name} — Free offline photo slideshow app`;
+const description =
+  'Make full-screen photo slideshows from your computer and Google Photos. Free, works offline, and your photos never leave your device.';
+const siteUrl = new URL('/', Astro.site).toString();
+const appUrl = new URL(app, Astro.site).toString();
+
+const features = [
+  {
+    title: 'Works offline',
+    color: 'var(--t3)',
+    body: `Install ${SITE.name} as an app and it keeps working with no connection. Playing slideshows and managing your library never need the internet. Only importing from Google Photos does.`,
+  },
+  {
+    title: 'Google Photos, on your terms',
+    color: 'var(--t4)',
+    body: `Pick photos with Google’s own Photos Picker. ${SITE.name} only gets access to the photos you choose, never the rest of your library.`,
+  },
+  {
+    title: 'Full-screen formats',
+    color: 'var(--t1)',
+    body: 'Sliding Tiles splits each photo into a grid of tiles that slide away to reveal the next. Tune the grid, direction, easing and speed. More formats are on the way.',
+  },
+  {
+    title: 'Processed on your device',
+    color: 'var(--t2)',
+    body: 'Photos are resized in your browser, rotated the right way up, and stripped of all metadata, including GPS location. Nothing is uploaded.',
+  },
+  {
+    title: 'Light on storage',
+    color: 'var(--t5)',
+    body: 'Photos are saved as screen-sized WebP copies, so 1,000 photos take a few hundred MB (roughly 250–500 MB) at the default setting. Originals aren’t kept unless you ask.',
+  },
+  {
+    title: 'Local files and folders',
+    color: 'var(--t6)',
+    body: 'Select many photos at once or a whole folder, including HEIC photos from iPhones. Build as many collections as you like and add or remove photos anytime.',
+  },
+];
+
+const faqs = [
+  {
+    q: `Is ${SITE.name} free?`,
+    a: `Yes. ${SITE.name} is free. There’s no account to create, no subscription and no ads.`,
+  },
+  {
+    q: 'Are my photos uploaded anywhere?',
+    a: `No. Photos are processed on your device and stored in your browser’s local storage (IndexedDB). ${SITE.name} has no server that receives your photos, and there are no analytics or tracking.`,
+  },
+  {
+    q: 'Does it work without an internet connection?',
+    a: `Yes. After your first visit, ${SITE.name} works offline, and you can install it as an app. Playing slideshows and managing collections work with no connection. Importing from Google Photos needs one.`,
+  },
+  {
+    q: `What can ${SITE.name} see in my Google account?`,
+    a: `Only the photos you pick. ${SITE.name} uses Google’s Photos Picker with the read-only photospicker.mediaitems.readonly permission, which grants access to the photos you select and nothing else. You only sign in while importing, and the access token is short-lived (about an hour) and kept in memory, never saved.`,
+  },
+  {
+    q: 'How much storage does it use?',
+    a: 'At the default Screen-fit quality (sized to your display, up to 2560px), 1,000 photos take roughly 250–500 MB, depending on your screen and the photos. The High (2560px) and 4K (3840px) tiers use more. Originals are not kept unless you turn that on.',
+  },
+  {
+    q: 'Which photo formats are supported?',
+    a: 'JPEG, PNG, WebP, GIF, AVIF and HEIC/HEIF, including photos straight from an iPhone. Each photo is turned the right way up and its metadata, including GPS location, is removed.',
+  },
+  {
+    q: 'How do I leave full-screen?',
+    a: 'Press Esc once to leave full-screen while the slideshow keeps playing in the window. Press Esc again to stop. Space pauses, the arrow keys move between photos, and on touch screens you can swipe.',
+  },
+  {
+    q: 'What if I’ve turned on “reduce motion”?',
+    a: `${SITE.name} respects your system setting and automatically uses a gentle crossfade instead of sliding tiles.`,
+  },
+];
+
+const softwareLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: SITE.name,
+  applicationCategory: 'MultimediaApplication',
+  operatingSystem: 'Web browser',
+  description: SITE.description,
+  url: siteUrl,
+  installUrl: appUrl,
+  image: new URL('/og.png', Astro.site).toString(),
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  featureList: [
+    'Import photos from local files and folders',
+    'Import selected photos from Google Photos via the Google Photos Picker',
+    'Multiple collections',
+    'Works offline as an installable web app',
+    'Full-screen slideshow with Sliding Tiles transitions',
+    'Crossfade when reduce motion is enabled',
+    'On-device photo processing with metadata and GPS removal',
+    'Storage-efficient screen-sized WebP copies',
+    'HEIC support',
+    'No server uploads, no analytics',
+  ],
+};
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+};
+
+// Escape "<" so JSON can never close the <script> element.
+const ld = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
+
+// ---- Hero illustration: a photo split into tiles sliding away to reveal the next.
+const W = 640;
+const H = 400;
+const COLS = 4;
+const ROWS = 3;
+const tw = W / COLS;
+const th = H / ROWS;
+// Painted in-place first, so tiles further along their slide sit on top.
+const tiles = [] as { i: number; score: number; x: number; y: number; dx: number; dy: number; o: number; drift?: string }[];
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) {
+    const score = r + c; // tiles leave from the top-left corner first
+    if (score <= 1) continue; // already gone, revealing the next photo
+    const i = r * COLS + c;
+    const t =
+      score === 2
+        ? { dx: -64, dy: -48, o: 0.7, drift: 'drift' }
+        : score === 3
+          ? { dx: -24, dy: -18, o: 0.92, drift: c % 2 ? 'drift drift-2' : 'drift drift-3' }
+          : { dx: 0, dy: 0, o: 1 };
+    tiles.push({ i, x: c * tw, y: r * th, score, ...t });
+  }
+}
+tiles.sort((a, b) => b.score - a.score);
+---
+
+<Base title={title} description={description} path="/">
+  <style slot="head" is:inline set:html={landingCss} />
+  <script slot="head" type="application/ld+json" is:inline set:html={ld(softwareLd)} />
+  <script slot="head" type="application/ld+json" is:inline set:html={ld(faqLd)} />
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/" aria-label={`${SITE.name} home`}>
+        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <rect width="32" height="32" rx="7" fill="#1e222b" />
+          <rect x="5" y="5" width="10" height="10" rx="2" fill="#f5b14c" />
+          <rect x="17" y="5" width="10" height="10" rx="2" fill="#ef6f6c" />
+          <rect x="5" y="17" width="10" height="10" rx="2" fill="#4fc1b0" />
+          <rect x="19" y="19" width="9" height="9" rx="2" fill="#5b8def" />
+        </svg>
+        <span>{SITE.name}</span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+      <a class="btn btn-primary btn-sm" href={app}>Launch app</a>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <div>
+          <h1 id="hero-title">Your photos, full-screen. <span>Even offline.</span></h1>
+          <p class="lede">
+            {SITE.name} turns photos from your computer and Google Photos into a beautiful full-screen slideshow. It runs
+            entirely in your browser, works without a connection, and your photos never leave your device.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary btn-lg" href={app}>Launch app</a>
+            <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+          </div>
+          <ul class="pills" aria-label="Highlights">
+            <li>Free to use</li>
+            <li>No account for local photos</li>
+            <li>No uploads, no tracking</li>
+          </ul>
+        </div>
+
+        <svg
+          class="hero-art"
+          width={W}
+          height={H}
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-labelledby="hero-art-title"
+          focusable="false"
+        >
+          <title id="hero-art-title">
+            Illustration of the Sliding Tiles transition: a mountain photo splits into tiles that slide away to reveal a
+            sunset photo underneath.
+          </title>
+          <defs>
+            <clipPath id="frame"><rect width={W} height={H} rx="16" /></clipPath>
+            <linearGradient id="sky-next" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#9b7ede" />
+              <stop offset="0.55" stop-color="#ef6f6c" />
+              <stop offset="1" stop-color="#f5b14c" />
+            </linearGradient>
+            <linearGradient id="sky-cur" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#5b8def" />
+              <stop offset="1" stop-color="#a9e4da" />
+            </linearGradient>
+            <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#2f7f8f" />
+              <stop offset="1" stop-color="#173a4a" />
+            </linearGradient>
+            <g id="cur">
+              <rect width={W} height={H} fill="url(#sky-cur)" />
+              <circle cx="565" cy="70" r="30" fill="#fdf6e3" opacity="0.9" />
+              <path d="M0 270 L120 130 L200 220 L300 90 L420 230 L500 160 L640 280 L640 400 L0 400 Z" fill="#2b4a6b" />
+              <path d="M260 135 L300 90 L340 140 L318 132 L300 150 L282 130 Z" fill="#eef4fb" />
+              <path d="M0 300 L140 210 L260 290 L380 220 L520 300 L640 250 L640 400 L0 400 Z" fill="#1f5d5a" />
+              <rect y="318" width={W} height="82" fill="url(#lake)" />
+            </g>
+            {
+              tiles.map((t) => (
+                <clipPath id={`tile-${t.i}`}>
+                  <rect x={t.x} y={t.y} width={tw} height={th} />
+                </clipPath>
+              ))
+            }
+          </defs>
+          <g clip-path="url(#frame)">
+            <rect width={W} height={H} fill="url(#sky-next)" />
+            <circle cx="190" cy="230" r="64" fill="#ffe2a8" />
+            <path d="M0 300 C120 270 220 320 330 300 S540 260 640 290 L640 400 L0 400 Z" fill="#3a2440" />
+            <path d="M0 340 C140 320 260 360 400 340 S560 320 640 345 L640 400 L0 400 Z" fill="#241729" />
+            {
+              tiles.map((t) => (
+                <g transform={`translate(${t.dx} ${t.dy})`} opacity={t.o}>
+                  <g class={t.drift}>
+                    <g clip-path={`url(#tile-${t.i})`}>
+                      <use href="#cur" />
+                    </g>
+                    <rect
+                      x={t.x + 1}
+                      y={t.y + 1}
+                      width={tw - 2}
+                      height={th - 2}
+                      fill="none"
+                      stroke="#0f1115"
+                      stroke-opacity="0.55"
+                      stroke-width="2"
+                    />
+                  </g>
+                </g>
+              ))
+            }
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">A slideshow app that respects your photos</h2>
+        <p class="lede">
+          Everything you need to put your favourite photos on a big screen — and nothing that sends them somewhere else.
+        </p>
+        <div class="grid">
+          {
+            features.map((f) => (
+              <article class="card">
+                <svg class="card-icon" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                  <rect x="2" y="2" width="12" height="12" rx="3" fill={f.color} />
+                  <rect x="18" y="2" width="12" height="12" rx="3" fill={f.color} opacity="0.55" />
+                  <rect x="2" y="18" width="12" height="12" rx="3" fill={f.color} opacity="0.55" />
+                  <rect x="20" y="20" width="10" height="10" rx="3" fill={f.color} opacity="0.85" />
+                </svg>
+                <h3>{f.title}</h3>
+                <p>{f.body}</p>
+              </article>
+            ))
+          }
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={app}>Start a slideshow</a>
+          <p class="cta-note">Free, in your browser. Nothing to install first.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="playback" aria-labelledby="playback-title">
+      <div class="wrap">
+        <p class="eyebrow">Full-screen playback</p>
+        <h2 id="playback-title">Made for the big screen</h2>
+        <p class="lede">
+          Put {SITE.name} on a TV, a spare monitor or a laptop at a party. Controls and the cursor hide when idle, and the
+          screen stays awake while the slideshow plays.
+        </p>
+        <div class="split">
+          <div>
+            <h3>Sliding Tiles</h3>
+            <p>
+              Each photo splits into a grid of tiles that slide away to reveal the next one. Choose the grid size, the
+              direction the tiles travel, the easing and the speed. If your system’s “reduce motion” setting is on, {SITE.name} switches to a gentle crossfade automatically.
+            </p>
+            <h3>Your settings</h3>
+            <ul class="checklist">
+              <li><strong>Interval</strong> — how long each photo stays on screen</li>
+              <li><strong>Transition speed</strong> — quick and snappy or slow and calm</li>
+              <li><strong>Shuffle</strong> — a new order every time</li>
+              <li><strong>Fit</strong> — show the whole photo, or fill the screen over a blurred backdrop</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Simple controls</h3>
+            <dl class="keys">
+              <dt><kbd>Esc</kbd></dt>
+              <dd>Leave full-screen and keep playing in the window</dd>
+              <dt><kbd>Esc</kbd> again</dt>
+              <dd>Stop the slideshow</dd>
+              <dt><kbd>Space</kbd></dt>
+              <dd>Pause or resume</dd>
+              <dt><kbd>←</kbd> <kbd>→</kbd></dt>
+              <dd>Previous or next photo</dd>
+              <dt>Swipe</dt>
+              <dd>Move between photos on touch screens</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={app}>Try Sliding Tiles</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-title">From photos to slideshow in three steps</h2>
+        <ol class="steps">
+          <li>
+            <h3>Add your photos</h3>
+            <p>
+              Choose photos or a whole folder from your computer, or pick photos from Google Photos. Add or remove
+              photos anytime, and keep as many collections as you like.
+            </p>
+          </li>
+          <li>
+            <h3>{SITE.name} prepares them on your device</h3>
+            <p>
+              Each photo is resized for your screen, turned the right way up and stripped of metadata, then saved in
+              your browser. Pick Screen-fit, High (2560px) or 4K (3840px) quality.
+            </p>
+          </li>
+          <li>
+            <h3>Press play</h3>
+            <p>
+              Go full-screen and enjoy. It works offline from then on: install {SITE.name} as an app and your
+              slideshows are ready even with no connection.
+            </p>
+          </li>
+        </ol>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={app}>Launch app</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="privacy" aria-labelledby="privacy-title">
+      <div class="wrap">
+        <p class="eyebrow">Privacy</p>
+        <h2 id="privacy-title">Your photos never leave your device</h2>
+        <p class="lede">
+          {SITE.name} is a set of static files that runs in your browser. There’s no {SITE.name} server to upload to, no
+          account and no analytics.
+        </p>
+        <div class="split">
+          <div>
+            <h3>What happens to your photos</h3>
+            <ul class="checklist">
+              <li>
+                <strong>Processed on your device.</strong> Resizing and conversion happen in your browser, not in the cloud.
+              </li>
+              <li>
+                <strong>Stored only on this device,</strong> in your browser’s local storage (IndexedDB). Delete a collection,
+                or clear this site’s data, and the copies are gone.
+              </li>
+              <li>
+                <strong>Metadata removed.</strong> Saved copies have all metadata stripped, including GPS location.
+              </li>
+              <li><strong>Originals aren’t kept</strong> unless you choose to keep them.</li>
+              <li><strong>No analytics, no tracking, no ads.</strong></li>
+            </ul>
+          </div>
+          <div class="privacy-panel">
+            <h3>The Google permission we ask for, and why</h3>
+            <p>
+              Importing from Google Photos uses Google’s Photos Picker and asks for one read-only permission:
+              <code>photospicker.mediaitems.readonly</code>. It lets {SITE.name} download only the photos you select in
+              the picker, so it can make local copies. It can’t see, change or delete anything else in your library.
+            </p>
+            <p>
+              You only sign in with Google while importing. The access token lasts about an hour, is kept in memory
+              only and is never saved. You can also remove access anytime from your Google Account settings.
+            </p>
+          </div>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={app}>Launch app</a>
+          <p class="cta-note">Local photos need no sign-in at all.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <p class="eyebrow">FAQ</p>
+        <h2 id="faq-title">Questions, answered</h2>
+        <div class="faq">
+          {
+            faqs.map(({ q, a }) => (
+              <details>
+                <summary>{q}</summary>
+                <p>{a}</p>
+              </details>
+            ))
+          }
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={app}>Launch app</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing" aria-labelledby="closing-title">
+      <div class="wrap">
+        <h2 id="closing-title">Ready to put your photos on screen?</h2>
+        <p class="lede">Free, private and offline-ready. Open {SITE.name} and add your first photos in seconds.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href={app}>Launch {SITE.name}</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>{SITE.name} — free to use. Your photos stay on your device.</p>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href={app}>Launch app</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+    </div>
+  </footer>
+
+  <script is:inline>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        try {
+          navigator.serviceWorker.register('/sw.js').catch(function () {});
+        } catch (e) {}
+      });
+    }
+  </script>
+</Base>
