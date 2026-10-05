@@ -1,0 +1,146 @@
+---
+/**
+ * Privacy policy and terms of service. Static, like the landing page, and reuses its styles.
+ * #privacy and #terms are linkable on their own (e.g. from Google's OAuth consent screen).
+ */
+import Base from '../layouts/Base.astro';
+import { SITE } from '../site';
+import landingCss from '../styles/landing.css?inline';
+
+const updated = 'October 5, 2026';
+const title = `Privacy & terms — ${SITE.name}`;
+const description = `How ${SITE.name} handles your data (it doesn't collect any) and the terms for using it.`;
+---
+
+<Base title={title} description={description} path="/legal">
+  <style slot="head" is:inline set:html={landingCss} />
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/" aria-label={`${SITE.name} home`}>
+        <img src="/favicon.svg" alt="" width="28" height="28" />
+        <span>{SITE.name}</span>
+      </a>
+      <a class="btn btn-primary btn-sm" href={SITE.appPath}>Launch app</a>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1" class="legal">
+    <div class="wrap">
+      <section id="privacy" aria-labelledby="privacy-title">
+        <h1 id="privacy-title">Privacy policy</h1>
+        <p class="updated">Last updated {updated}</p>
+        <p class="lede">
+          {SITE.name} doesn’t collect, store or sell your personal information. Your photos stay on your device.
+        </p>
+
+        <h2>Your photos</h2>
+        <p>
+          Photos you add are processed and stored in your browser on your own device. They are never uploaded to us.
+          Deleting a collection, or clearing this site’s data in your browser, removes them. Backups you export are files
+          you keep.
+        </p>
+
+        <h2>Google Photos</h2>
+        <p>
+          If you import from Google Photos, you sign in with Google and grant read-only access
+          (<code>photospicker.mediaitems.readonly</code>) to the photos you pick, and nothing else. Those photos download
+          straight from Google to your browser. The access token is kept in memory only and expires after about an hour.
+          We never receive, store or share your Google data. You can remove access anytime in your
+          <a href="https://myaccount.google.com/permissions" rel="noopener">Google Account settings</a>.
+        </p>
+        <p>
+          {SITE.name}’s use of information received from Google APIs adheres to the
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener"
+            >Google API Services User Data Policy</a
+          >, including the Limited Use requirements.
+        </p>
+
+        <h2>Hosting</h2>
+        <p>
+          This site is served by Cloudflare. Like any website, Cloudflare processes basic technical information, such as
+          your IP address, browser type and the pages requested, to deliver the site and protect it from abuse. See
+          <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare’s privacy policy</a>. We don’t
+          use this information to identify or track you.
+        </p>
+
+        <h2>No tracking</h2>
+        <p>There are no accounts, analytics, advertising or tracking cookies.</p>
+
+        <h2>Changes</h2>
+        <p>If this policy changes, we’ll update this page and the date above.</p>
+      </section>
+
+      <section id="terms" aria-labelledby="terms-title">
+        <h1 id="terms-title">Terms of service</h1>
+        <p class="updated">Last updated {updated}</p>
+        <p class="lede">By using {SITE.name}, you agree to these terms.</p>
+
+        <h2>Using {SITE.name}</h2>
+        <p>
+          {SITE.name} is free to use. Only add photos you have the right to use. They remain yours, and we get no rights
+          to them.
+        </p>
+
+        <h2>Your data</h2>
+        <p>
+          Your library lives in your browser, and browsers can clear stored data. Keep your originals, and export a
+          backup if your slideshows matter to you.
+        </p>
+
+        <h2>Google Photos</h2>
+        <p>Importing from Google Photos is also subject to Google’s terms.</p>
+
+        <h2>No warranty</h2>
+        <p>
+          {SITE.name} is provided “as is”, without warranties of any kind. To the fullest extent permitted by law, we
+          aren’t liable for any loss or damage, including lost photos or data, arising from your use of it.
+        </p>
+
+        <h2>Changes</h2>
+        <p>
+          We may change or discontinue {SITE.name}, or update these terms, at any time. Continuing to use it means you
+          accept the current terms.
+        </p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>{SITE.name} — free to use. Your photos stay on your device.</p>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href={SITE.appPath}>Launch app</a></li>
+        </ul>
+      </nav>
+    </div>
+  </footer>
+</Base>
+
+<style>
+  .legal section {
+    max-width: 44rem;
+  }
+
+  .legal h1 {
+    font-size: clamp(1.8rem, 1.3rem + 2vw, 2.6rem);
+    margin-bottom: 0.25em;
+  }
+
+  .legal h2 {
+    font-size: 1.2rem;
+    margin-top: 1.75em;
+  }
+
+  .legal p {
+    color: var(--muted);
+  }
+
+  .legal .updated {
+    font-size: 0.95rem;
+  }
+</style>

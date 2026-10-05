@@ -361,6 +361,9 @@ export default function App() {
               if (r.collections[0]) await switchCollection(r.collections[0].id);
             }}
           />
+          <p className="muted">
+            <a href="/legal">Privacy &amp; terms</a>
+          </p>
         </section>
       )}
 
