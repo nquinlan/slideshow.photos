@@ -147,12 +147,14 @@ export function canUpgrade(existing: Photo, cap: number): boolean {
 }
 
 /**
- * Store a newly processed photo and add it to a collection, atomically.
+ * Store a newly processed photo and add it to a collection (or none, when
+ * `collectionId` is null — e.g. library import assembles collections later),
+ * atomically.
  * If a photo with the same content hash already exists, it is linked instead
  * and the new blobs are discarded.
  */
 export async function addProcessedPhoto(
-  collectionId: string,
+  collectionId: string | null,
   photo: Omit<Photo, 'id' | 'addedAt'>,
   blobs: NewPhotoBlobs,
 ): Promise<AddResult> {
@@ -182,7 +184,7 @@ async function storedBlobs(b: NewPhotoBlobs, mode: 'blob' | 'buffer'): Promise<S
 }
 
 async function writeProcessedPhoto(
-  collectionId: string,
+  collectionId: string | null,
   photo: Omit<Photo, 'id' | 'addedAt'>,
   blobs: StoredPhotoBlobs,
 ): Promise<AddResult> {
@@ -209,7 +211,7 @@ async function writeProcessedPhoto(
       await db.displays.put({ photoId: existing.id, ...blobs.display });
       await db.thumbs.put({ photoId: existing.id, ...blobs.thumb });
       if (blobs.original) await db.originals.put({ photoId: existing.id, ...blobs.original });
-      await linkPhoto(collectionId, existing.id);
+      if (collectionId) await linkPhoto(collectionId, existing.id);
       return { status: 'upgraded', photo: upgraded };
     }
     if (existing) {
@@ -218,7 +220,7 @@ async function writeProcessedPhoto(
       if (photo.quickKey && !existing.quickKey) patch.quickKey = photo.quickKey;
       if (photo.googleId && !existing.googleId) patch.googleId = photo.googleId;
       if (Object.keys(patch).length) await db.photos.update(existing.id, patch);
-      const linked = await linkPhoto(collectionId, existing.id);
+      const linked = collectionId ? await linkPhoto(collectionId, existing.id) : false;
       return { status: linked ? 'linked' : 'duplicate', photo: existing } as AddResult;
     }
     const full: Photo = { ...photo, id: uid(), addedAt: Date.now() };
@@ -226,8 +228,10 @@ async function writeProcessedPhoto(
     await db.displays.add({ photoId: full.id, ...blobs.display });
     await db.thumbs.add({ photoId: full.id, ...blobs.thumb });
     if (blobs.original) await db.originals.add({ photoId: full.id, ...blobs.original });
-    await db.items.add({ collectionId, photoId: full.id, position: await nextPosition(collectionId) });
-    await db.collections.update(collectionId, { updatedAt: Date.now() });
+    if (collectionId) {
+      await db.items.add({ collectionId, photoId: full.id, position: await nextPosition(collectionId) });
+      await db.collections.update(collectionId, { updatedAt: Date.now() });
+    }
     return { status: 'added', photo: full } as AddResult;
   });
 }
@@ -311,36 +315,19 @@ export async function listGraphics(): Promise<Graphic[]> {
  */
 export async function addGraphic(file: File): Promise<Graphic> {
   const { type, width, height } = await inspectGraphicFile(file);
-  const graphic: Graphic = {
-    id: uid(),
-    name: file.name.replace(/\.(png|svg)$/i, '') || 'Graphic',
-    type,
-    width,
-    height,
-    bytes: file.size,
-    background: '#000000',
-    scalePct: 80,
-    fullScreen: false,
-    addedAt: Date.now(),
-  };
-  const blob = new Blob([file], { type: type === 'svg' ? 'image/svg+xml' : 'image/png' });
-  const write = async (mode: 'blob' | 'buffer') => {
-    const stored = await toStored(blob, mode);
-    const db = getDB();
-    await db.transaction('rw', db.graphics, db.graphicFiles, async () => {
-      await db.graphics.add(graphic);
-      await db.graphicFiles.add({ graphicId: graphic.id, ...stored });
-    });
-  };
-  const mode = await blobStorageMode();
-  try {
-    await write(mode);
-  } catch (e) {
-    if (mode !== 'blob' || !isBlobStorageError(e)) throw e;
-    setBlobMode('buffer');
-    await write('buffer');
-  }
-  return graphic;
+  return addGraphicRecord(
+    {
+      name: file.name.replace(/\.(png|svg)$/i, '') || 'Graphic',
+      type,
+      width,
+      height,
+      bytes: file.size,
+      background: '#000000',
+      scalePct: 80,
+      fullScreen: false,
+    },
+    file,
+  );
 }
 
 export async function updateGraphic(id: string, patch: Partial<Pick<Graphic, 'name' | 'background' | 'scalePct' | 'fullScreen'>>) {
@@ -358,4 +345,51 @@ export async function deleteGraphic(id: string) {
 /** The uploaded file, byte-for-byte. */
 export async function getGraphicFile(id: string): Promise<Blob | undefined> {
   return fromStored(await getDB().graphicFiles.get(id));
+}
+
+/** Create a collection with given settings (used by library import). */
+export async function createCollectionWith(name: string, settings: PlaybackSettings): Promise<Collection> {
+  const now = Date.now();
+  const c: Collection = { id: uid(), name: name.trim() || 'Untitled collection', createdAt: now, updatedAt: now, settings };
+  await getDB().collections.add(c);
+  return c;
+}
+
+/** Append photos to a collection in the given order (skipping ones already in it), in one transaction. */
+export async function appendToCollection(collectionId: string, photoIds: string[]) {
+  const db = getDB();
+  await db.transaction('rw', db.items, db.collections, async () => {
+    let position = await nextPosition(collectionId);
+    const seen = new Set<string>();
+    for (const photoId of photoIds) {
+      if (seen.has(photoId)) continue;
+      seen.add(photoId);
+      if (await db.items.where('[collectionId+photoId]').equals([collectionId, photoId]).count()) continue;
+      await db.items.add({ collectionId, photoId, position: position++ });
+    }
+    await db.collections.update(collectionId, { updatedAt: Date.now() });
+  });
+}
+
+/** Add a graphic with known settings and file (used by library import); file stored byte-for-byte. */
+export async function addGraphicRecord(g: Omit<Graphic, 'id' | 'addedAt'>, file: Blob): Promise<Graphic> {
+  const graphic: Graphic = { ...g, id: uid(), addedAt: Date.now() };
+  const blob = new Blob([file], { type: g.type === 'svg' ? 'image/svg+xml' : 'image/png' });
+  const write = async (mode: 'blob' | 'buffer') => {
+    const stored = await toStored(blob, mode);
+    const db = getDB();
+    await db.transaction('rw', db.graphics, db.graphicFiles, async () => {
+      await db.graphics.add(graphic);
+      await db.graphicFiles.add({ graphicId: graphic.id, ...stored });
+    });
+  };
+  const mode = await blobStorageMode();
+  try {
+    await write(mode);
+  } catch (e) {
+    if (mode !== 'blob' || !isBlobStorageError(e)) throw e;
+    setBlobMode('buffer');
+    await write('buffer');
+  }
+  return graphic;
 }

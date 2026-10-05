@@ -18,6 +18,7 @@
     "@astrojs/react": "^7.0.0",
     "@astrojs/sitemap": "^3.7.4",
     "@tanstack/react-virtual": "^3.14.13",
+    "@zip.js/zip.js": "^2.23.0",
     "astro": "^7.3.5",
     "dexie": "^4.4.6",
     "exifr": "^7.1.3",

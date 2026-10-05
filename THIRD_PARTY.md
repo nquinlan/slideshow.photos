@@ -10,6 +10,7 @@ Versions are those locked at the time of writing (`package-lock.json` is authori
 | [dexie](https://github.com/dexie/Dexie.js) | 4.4.6 | Apache-2.0 | IndexedDB storage |
 | [exifr](https://github.com/MikeKovarik/exifr) (lite build) | 7.1.3 | MIT | Reading EXIF orientation and capture date before metadata is stripped |
 | [image-size](https://codeberg.org/image-size/image-size) | 2.0.4 | MIT | Reading image dimensions from headers, so decoding can happen at the target size |
+| [@zip.js/zip.js](https://github.com/gildas-lormeau/zip.js) | 2.23.0 | BSD-3-Clause | Library export/import (.zip, streaming, Zip64) |
 | [@tanstack/react-virtual](https://github.com/TanStack/virtual), virtual-core | 3.14 / 3.17 | MIT | Virtualized thumbnail grid |
 | [workbox-window](https://github.com/GoogleChrome/workbox), plus workbox-core, -precaching and -routing (inlined into `sw.js`) | 7.4.1 | MIT | Service worker registration, updates, precaching |
 | Astro client runtime ([astro](https://github.com/withastro/astro)) | 7.3.5 | MIT | Island hydration for `/app` |
