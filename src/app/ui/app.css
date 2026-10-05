@@ -637,23 +637,20 @@ input[type='radio'] {
   white-space: nowrap;
 }
 .preview-stage {
+  position: relative;
   min-height: 0;
-  display: grid;
-  place-items: center;
   background: #000;
   border-radius: 6px;
   overflow: hidden;
 }
-.preview-stage img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
+/* Fill the stage and letterbox, so tall and wide photos are both shown whole. */
+.preview-stage img,
 .preview-stage .tile-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 .preview-select {
   gap: 0.45rem;
