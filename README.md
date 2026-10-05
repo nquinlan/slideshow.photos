@@ -127,8 +127,6 @@ All processing is local. There are no analytics. Google code is loaded only afte
 ## Testing status
 
 - **Unit tests:** 47 passing (`npm test`).
-- **E2E (Playwright):** after the fixes from the first run (EXIF orientation; Blob storage in WebKit), 9 of 11 passed, and the remaining 2 were test issues in WebKit, since fixed:
-  - The import test's storage check didn't handle WebKit's ArrayBuffer storage.
-  - Offline *reload* can't run in Playwright's WebKit at all ([microsoft/playwright#42775](https://github.com/microsoft/playwright/issues/42775)). There, the offline test instead checks that the service worker serves the app shell and that photos decode with no network. The full reload runs in Chromium and Firefox.
-  - Verify offline launch in real Safari by hand.
+- **E2E (Playwright):** import, dedupe, metadata stripping (GPS, camera and date verified by parsing the stored bytes) and playback run in Chromium, Firefox and WebKit. Full-screen/Escape and offline run in Chromium only.
+- **Offline in Firefox and Safari: check by hand.** Playwright supports service workers only in Chromium. Its offline mode either bypasses the worker (Firefox) or aborts the page load (WebKit, [microsoft/playwright#42775](https://github.com/microsoft/playwright/issues/42775)). To check: load `/app` once, wait for "Ready to work offline", go offline, reload.
 - **Not yet run:** the in-browser speed/memory benchmark (`npm run bench`) and Lighthouse.

@@ -23,8 +23,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    // Import/offline flows in other engines (fullscreen behaviour differs; Escape spec is Chromium-only).
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /escape/ },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /escape/ },
+    // Import + playback in the other engines. Escape is Chromium-only (automation and full-screen
+    // differ per engine); offline is Chromium-only because Playwright supports service workers
+    // only in Chromium (see offline.spec.ts).
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /escape|offline/ },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /escape|offline/ },
   ],
 });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import exifr from 'exifr';
 import { ALL, addPhotos, expectPhotoCount, openApp } from './helpers';
 
 test('imports local photos, dedupes, applies EXIF orientation, survives reload, and removes', async ({ page }) => {
@@ -21,7 +22,13 @@ test('imports local photos, dedupes, applies EXIF orientation, survives reload, 
   await expect(page.getByText(/already in library/)).toBeVisible();
   await expectPhotoCount(page, 5);
 
-  // Stored derivatives are WebP (or JPEG where WebP encoding is unsupported) with metadata stripped.
+  // A photo carrying GPS, camera make/model and a capture date.
+  await addPhotos(page, ['gps-exif.jpg']);
+  await expectPhotoCount(page, 6);
+
+  // Stored derivatives are WebP (or JPEG where canvas can't encode WebP, e.g. Safari) and carry
+  // none of the source metadata. Encoders may add their own minimal Exif (WebKit's JPEG encoder
+  // does), so we parse the stored bytes in Node rather than looking for an "Exif" marker.
   const stored = await page.evaluate(async () => {
     const req = indexedDB.open('tessera');
     const db: IDBDatabase = await new Promise((r) => (req.onsuccess = () => r(req.result)));
@@ -33,28 +40,56 @@ test('imports local photos, dedupes, applies EXIF orientation, survives reload, 
     db.close();
     return Promise.all(
       rows.map(async (row) => {
-        const blob = row.blob ?? new Blob([row.data!], { type: row.type });
-        const head = new Uint8Array(await blob.slice(0, 4096).arrayBuffer());
-        const text = String.fromCharCode(...head);
-        return { type: blob.type, hasExif: text.includes('Exif') };
+        const bytes = new Uint8Array(row.blob ? await row.blob.arrayBuffer() : row.data!);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return { type: row.blob?.type ?? row.type ?? '', base64: btoa(bin) };
       }),
     );
   });
-  expect(stored).toHaveLength(5);
+  expect(stored).toHaveLength(6);
+  const leftovers: Record<string, unknown>[] = [];
   for (const s of stored) {
     expect(['image/webp', 'image/jpeg']).toContain(s.type);
-    expect(s.hasExif).toBe(false);
+    const tags = (await exifr.parse(Buffer.from(s.base64, 'base64'), { gps: true, xmp: true, iptc: true })) ?? {};
+    expect(tags.latitude).toBeUndefined();
+    expect(tags.GPSLatitude).toBeUndefined();
+    expect(tags.Make).toBeUndefined();
+    expect(tags.Model).toBeUndefined();
+    expect(tags.DateTimeOriginal).toBeUndefined();
+    expect(tags.Software).not.toBe('fixture');
+    if (Object.keys(tags).length) leftovers.push(tags);
   }
+  // Record any encoder-added tags in the report, for visibility.
+  if (leftovers.length) test.info().annotations.push({ type: 'encoder-exif', description: JSON.stringify(leftovers[0]) });
 
   // Persisted across reloads.
   await page.reload();
-  await expectPhotoCount(page, 5);
+  await expectPhotoCount(page, 6);
 
   // Remove two photos.
   await page.getByRole('checkbox', { name: 'Select ocean.jpg' }).check({ force: true });
   await page.getByRole('checkbox', { name: 'Select night.png' }).check({ force: true });
   await page.getByRole('button', { name: 'Remove from collection' }).click();
-  await expectPhotoCount(page, 3);
+  await expectPhotoCount(page, 4);
+});
+
+// Runs in every engine (the full-screen/Escape spec is Chromium-only). Covers decoding
+// stored photos for playback, including WebKit's ArrayBuffer storage fallback.
+test('plays imported photos', async ({ page }) => {
+  await openApp(page);
+  await addPhotos(page, ALL);
+  await expectPhotoCount(page, 5);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  const player = page.getByTestId('player');
+  await expect(player).toBeVisible();
+  await expect(page.getByText('Loading…')).toBeHidden();
+  await expect(player.locator('.player-error')).toHaveCount(0);
+  await page.keyboard.press('ArrowRight');
+  await expect(player).toHaveAttribute('data-position', '1');
+  await page.keyboard.press('ArrowRight');
+  await expect(player).toHaveAttribute('data-position', '2');
+  await expect(player.locator('.player-error')).toHaveCount(0);
 });
 
 test('add from Google Photos is disabled with an explanation when offline', async ({ page, context }) => {
