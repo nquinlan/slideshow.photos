@@ -368,30 +368,6 @@ section + section {
   padding: 0.2rem 0.75rem;
 }
 
-/* Decorative tile drift; disabled for reduced motion. */
-@media (prefers-reduced-motion: no-preference) {
-  .hero-art .drift {
-    animation: drift 6s ease-in-out infinite alternate;
-  }
-
-  .hero-art .drift-2 {
-    animation-delay: -2s;
-  }
-
-  .hero-art .drift-3 {
-    animation-delay: -4s;
-  }
-}
-
-@keyframes drift {
-  from {
-    transform: translate(0, 0);
-  }
-  to {
-    transform: translate(-6px, -8px);
-  }
-}
-
 /* Feature cards */
 .grid {
   display: grid;

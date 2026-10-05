@@ -36,7 +36,7 @@ const TILES = ['#f5b14c', '#ef6f6c', '#4fc1b0', '#5b8def', '#9b7ede', '#f28fb1']
 
 /**
  * The mark: a 3x3 mosaic of rounded tiles where one tile is mid-slide,
- * echoing the "Sliding Tiles" transition. Drawn in a 0..100 coordinate box.
+ * echoing the tiled slideshow formats. Drawn in a 0..100 coordinate box.
  */
 function mosaic({ x = 0, y = 0, size = 100 } = {}) {
   const s = size / 100;

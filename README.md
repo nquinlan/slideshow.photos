@@ -1,6 +1,6 @@
 # Tessera: offline photo slideshows
 
-A static web app (no backend). Build a photo collection from local files and Google Photos, then play it full-screen with the **Sliding Tiles** transition. Photos are processed on the device into screen-sized WebP copies, stored in IndexedDB, and play offline.
+A static web app (no backend). Build a photo collection from local files and Google Photos, then play it full-screen as a **Sliding Panels** collage, **Floating** photos, or a **Crossfade**. Photos are processed on the device into screen-sized WebP copies, stored in IndexedDB, and play offline.
 
 - Landing page: `/`, with no JavaScript apart from an inline service-worker registration.
 - App: `/app`, built with React.
@@ -67,7 +67,7 @@ src/
     import/                importer (lanes, dedupe, quota handling, resumable jobs), local file
                            pickers (File System Access → <input> fallback), import queue, storage estimates
     google/                GIS token auth, Picker REST client, sized media download
-    formats/               SlideshowFormat plugin interface, Sliding Tiles, Crossfade
+    formats/               plugin interface; Sliding Panels (panels/ layout, matching, motion), Floating, Crossfade
     player/                engine (playlist, preload window, timing), full-screen/Escape, wake lock
     ui/                    React components
 scripts/build-sw.mjs       Workbox generateSW over dist/
@@ -91,15 +91,36 @@ scripts/build-sw.mjs       Workbox generateSW over dist/
 
 ### Playback
 
-- **Canvas 2D.** Rationale is in `src/app/formats/slidingTiles.ts`. Each slide is composed once (contain or cover, over a blurred or black backdrop); each frame is then about 2 × tiles sub-rect blits.
-- **Memory.** Only the current photo and the next 3 are decoded; others are `close()`d.
+- **Formats.** All formats draw on Canvas 2D; each one's file comments explain its rendering approach.
+  - **Sliding Panels** (default): a collage of up to 6 photos in a random layout, matched to panel shape and cover-cropped. It holds still for the interval, then the panels slide out to black, there's a short black beat, and a new layout slides in (about 0.9 s total). `→` skips ahead; `←` goes back through earlier layouts.
+  - **Floating:** photos drift across the screen at three depths, with parallax. Each photo is pre-rendered once into a sprite, so each frame is one `drawImage` per photo. `→` brings in another photo.
+  - **Crossfade:** one photo at a time.
+- **No upscaling.** Photos are never drawn larger than their original resolution. A small photo is shown centred at its native size instead.
+- **Memory.**
+  - Crossfade keeps only the current photo and the next 3 decoded.
+  - Sliding Panels and Floating decode each photo only as large as the area it fills.
+  - Everything is `close()`d as soon as it leaves the screen.
 - **Full-screen and Escape.** Play starts full-screen. The first Esc is consumed by the browser and playback continues in the window, with a button to go full-screen again. The second Esc stops. Pages can't intercept the first Esc, and the Keyboard Lock API is deliberately not used; see the comments in `src/app/player/fullscreen.ts`.
 - **Controls.** Space pauses. ←/→ and PageUp/PageDown navigate. F toggles full-screen. Swipe navigates on touch screens. The cursor and controls hide after 2.5 s idle. Screen Wake Lock is held while playing.
 - **Reduced motion.** `prefers-reduced-motion` switches playback to Crossfade.
 
 ### Adding a slideshow format
 
-Implement `SlideshowFormat` (`src/app/formats/types.ts`): `id`, `name`, `settingsSchema` and `create(ctx, settings)`, which returns `{ init, transition, resize, setRenderOptions, destroy }`. Then add it to `FORMATS` in `src/app/formats/index.ts`. The settings UI is generated from the schema, and values are stored per collection. The player core doesn't change; `tests/unit/engine.test.ts` registers a format at runtime to prove this.
+Implement `SlideshowFormat` in `src/app/formats/types.ts` as one of two kinds:
+
+- **`kind: 'transition'`** for formats that animate one photo into the next. The engine owns the playlist, timing and preloading. `create(ctx, settings)` returns `{ init, transition, resize, setRenderOptions, destroy }`.
+- **`kind: 'scene'`** for formats with several photos on screen or their own rhythm. `create(ctx, settings)` gets:
+  - a `PhotoLibrary`, which lists every photo's size and decodes any photo no larger than the box you pass;
+  - the timing settings and a random source;
+  - an `onStatus` callback.
+
+  It returns `{ start, pause, resume, next, prev, resize, setRenderOptions, setTiming, destroy }`.
+
+Every format also declares:
+- `settingsSchema`: the settings UI is generated from it, and values are stored per collection;
+- `uses`: which global settings apply (interval label, transition speed, shuffle, fit, backdrop). The UI hides the rest.
+
+Then add the format to `FORMATS` in `src/app/formats/index.ts`. The player core doesn't change; `tests/unit/engine.test.ts` registers both kinds at runtime to prove this.
 
 ## Offline and PWA
 

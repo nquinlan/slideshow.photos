@@ -30,7 +30,7 @@ const features = [
   {
     title: 'Full-screen formats',
     color: 'var(--t1)',
-    body: 'Sliding Tiles splits each photo into a grid of tiles that slide away to reveal the next. Tune the grid, direction, easing and speed. More formats are on the way.',
+    body: 'Sliding Panels arranges photos into a fresh collage every few seconds, matched to each panel’s shape. Floating lets photos drift past at different depths. Crossfade keeps it simple.',
   },
   {
     title: 'Processed on your device',
@@ -80,7 +80,7 @@ const faqs = [
   },
   {
     q: 'What if I’ve turned on “reduce motion”?',
-    a: `${SITE.name} respects your system setting and automatically uses a gentle crossfade instead of sliding tiles.`,
+    a: `${SITE.name} respects your system setting and automatically uses a gentle crossfade instead of the sliding and floating formats.`,
   },
 ];
 
@@ -101,7 +101,7 @@ const softwareLd = {
     'Import selected photos from Google Photos via the Google Photos Picker',
     'Multiple collections',
     'Works offline as an installable web app',
-    'Full-screen slideshow with Sliding Tiles transitions',
+    'Full-screen slideshow formats: Sliding Panels collages, Floating photos and Crossfade',
     'Crossfade when reduce motion is enabled',
     'On-device photo processing with metadata and GPS removal',
     'Storage-efficient screen-sized WebP copies',
@@ -123,30 +123,21 @@ const faqLd = {
 // Escape "<" so JSON can never close the <script> element.
 const ld = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
 
-// ---- Hero illustration: a photo split into tiles sliding away to reveal the next.
+// ---- Hero illustration: a Sliding Panels collage on black, two panels mid-slide.
 const W = 640;
 const H = 400;
-const COLS = 4;
-const ROWS = 3;
-const tw = W / COLS;
-const th = H / ROWS;
-// Painted in-place first, so tiles further along their slide sit on top.
-const tiles = [] as { i: number; score: number; x: number; y: number; dx: number; dy: number; o: number; drift?: string }[];
-for (let r = 0; r < ROWS; r++) {
-  for (let c = 0; c < COLS; c++) {
-    const score = r + c; // tiles leave from the top-left corner first
-    if (score <= 1) continue; // already gone, revealing the next photo
-    const i = r * COLS + c;
-    const t =
-      score === 2
-        ? { dx: -64, dy: -48, o: 0.7, drift: 'drift' }
-        : score === 3
-          ? { dx: -24, dy: -18, o: 0.92, drift: c % 2 ? 'drift drift-2' : 'drift drift-3' }
-          : { dx: 0, dy: 0, o: 1 };
-    tiles.push({ i, x: c * tw, y: r * th, score, ...t });
-  }
-}
-tiles.sort((a, b) => b.score - a.score);
+const G = 8; // gutter
+const CW = (W - 2 * G) / 3;
+const half = (H - G) / 2;
+// Each panel crops one of three illustrated scenes (640×400 each); `slide` offsets the
+// content inside its frame, as the panels do mid-transition.
+const panels = [
+  { x: 0, y: 0, w: CW, h: half, scene: 'sunset', sx: 60, sy: 120, s: 0.9, slide: -70 },
+  { x: 0, y: half + G, w: CW, h: half, scene: 'night', sx: 330, sy: 40, s: 0.75, slide: -70 },
+  { x: CW + G, y: 0, w: CW, h: H, scene: 'cur', sx: 210, sy: 0, s: 1, slide: 0 },
+  { x: 2 * (CW + G), y: 0, w: CW, h: 250, scene: 'night', sx: 40, sy: 60, s: 0.9, slide: 0 },
+  { x: 2 * (CW + G), y: 250 + G, w: CW, h: H - 250 - G, scene: 'sunset', sx: 330, sy: 260, s: 1.1, slide: 0 },
+].map((p, i) => ({ ...p, i }));
 ---
 
 <Base title={title} description={description} path="/">
@@ -210,8 +201,8 @@ tiles.sort((a, b) => b.score - a.score);
           focusable="false"
         >
           <title id="hero-art-title">
-            Illustration of the Sliding Tiles transition: a mountain photo splits into tiles that slide away to reveal a
-            sunset photo underneath.
+            Illustration of the Sliding Panels slideshow: a collage of five photos on black, with the left column's
+            panels sliding up out of their frames.
           </title>
           <defs>
             <clipPath id="frame"><rect width={W} height={H} rx="16" /></clipPath>
@@ -223,6 +214,10 @@ tiles.sort((a, b) => b.score - a.score);
             <linearGradient id="sky-cur" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#5b8def" />
               <stop offset="1" stop-color="#a9e4da" />
+            </linearGradient>
+            <linearGradient id="sky-night" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#121a3a" />
+              <stop offset="1" stop-color="#3b3f7a" />
             </linearGradient>
             <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#2f7f8f" />
@@ -236,36 +231,45 @@ tiles.sort((a, b) => b.score - a.score);
               <path d="M0 300 L140 210 L260 290 L380 220 L520 300 L640 250 L640 400 L0 400 Z" fill="#1f5d5a" />
               <rect y="318" width={W} height="82" fill="url(#lake)" />
             </g>
+            <g id="sunset">
+              <rect width={W} height={H} fill="url(#sky-next)" />
+              <circle cx="190" cy="230" r="64" fill="#ffe2a8" />
+              <path d="M0 300 C120 270 220 320 330 300 S540 260 640 290 L640 400 L0 400 Z" fill="#3a2440" />
+              <path d="M0 340 C140 320 260 360 400 340 S560 320 640 345 L640 400 L0 400 Z" fill="#241729" />
+            </g>
+            <g id="night">
+              <rect width={W} height={H} fill="url(#sky-night)" />
+              <circle cx="470" cy="110" r="38" fill="#f4f1de" />
+              <circle cx="486" cy="100" r="34" fill="#1a2148" />
+              <g fill="#f4f1de" opacity="0.8">
+                <circle cx="90" cy="60" r="2" />
+                <circle cx="160" cy="120" r="1.6" />
+                <circle cx="250" cy="50" r="2.2" />
+                <circle cx="340" cy="140" r="1.4" />
+                <circle cx="590" cy="190" r="1.8" />
+              </g>
+              <path d="M0 290 L90 230 L170 280 L260 210 L360 285 L470 240 L640 300 L640 400 L0 400 Z" fill="#0e1430" />
+              <path d="M300 300 L330 255 L360 300 Z M372 300 L396 266 L420 300 Z" fill="#162046" />
+            </g>
             {
-              tiles.map((t) => (
-                <clipPath id={`tile-${t.i}`}>
-                  <rect x={t.x} y={t.y} width={tw} height={th} />
+              panels.map((p) => (
+                <clipPath id={`panel-${p.i}`}>
+                  <rect x={p.x} y={p.y} width={p.w} height={p.h} />
                 </clipPath>
               ))
             }
           </defs>
           <g clip-path="url(#frame)">
-            <rect width={W} height={H} fill="url(#sky-next)" />
-            <circle cx="190" cy="230" r="64" fill="#ffe2a8" />
-            <path d="M0 300 C120 270 220 320 330 300 S540 260 640 290 L640 400 L0 400 Z" fill="#3a2440" />
-            <path d="M0 340 C140 320 260 360 400 340 S560 320 640 345 L640 400 L0 400 Z" fill="#241729" />
+            <rect width={W} height={H} fill="#000" />
             {
-              tiles.map((t) => (
-                <g transform={`translate(${t.dx} ${t.dy})`} opacity={t.o}>
-                  <g class={t.drift}>
-                    <g clip-path={`url(#tile-${t.i})`}>
-                      <use href="#cur" />
+              panels.map((p) => (
+                // Outer clip: the panel's fixed frame. Inner clip moves with the content,
+                // so a sliding panel shows its photo leaving the frame with black behind it.
+                <g clip-path={`url(#panel-${p.i})`}>
+                  <g transform={`translate(0 ${p.slide})`}>
+                    <g clip-path={`url(#panel-${p.i})`}>
+                      <use href={`#${p.scene}`} transform={`translate(${p.x - p.sx * p.s} ${p.y - p.sy * p.s}) scale(${p.s})`} />
                     </g>
-                    <rect
-                      x={t.x + 1}
-                      y={t.y + 1}
-                      width={tw - 2}
-                      height={th - 2}
-                      fill="none"
-                      stroke="#0f1115"
-                      stroke-opacity="0.55"
-                      stroke-width="2"
-                    />
                   </g>
                 </g>
               ))
@@ -315,14 +319,20 @@ tiles.sort((a, b) => b.score - a.score);
         </p>
         <div class="split">
           <div>
-            <h3>Sliding Tiles</h3>
+            <h3>Sliding Panels</h3>
             <p>
-              Each photo splits into a grid of tiles that slide away to reveal the next one. Choose the grid size, the
-              direction the tiles travel, the easing and the speed. If your system’s “reduce motion” setting is on, {SITE.name} switches to a gentle crossfade automatically.
+              A collage of up to six photos, each matched to the shape of its panel so little is cropped. It holds still,
+              then the panels slide away to black and a new layout slides in. Choose how long each layout stays, the gap
+              between photos and how often a single photo fills the screen.
+            </p>
+            <h3>Floating</h3>
+            <p>
+              Photos drift across the screen at different depths, nearer ones larger and faster. If your system’s
+              “reduce motion” setting is on, {SITE.name} switches to a gentle crossfade automatically.
             </p>
             <h3>Your settings</h3>
             <ul class="checklist">
-              <li><strong>Interval</strong> — how long each photo stays on screen</li>
+              <li><strong>Interval</strong> — how long each photo or layout stays on screen</li>
               <li><strong>Transition speed</strong> — quick and snappy or slow and calm</li>
               <li><strong>Shuffle</strong> — a new order every time</li>
               <li><strong>Fit</strong> — show the whole photo, or fill the screen over a blurred backdrop</li>
@@ -345,7 +355,7 @@ tiles.sort((a, b) => b.score - a.score);
           </div>
         </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href={app}>Try Sliding Tiles</a>
+          <a class="btn btn-primary" href={app}>Try Sliding Panels</a>
         </div>
       </div>
     </section>
