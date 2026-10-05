@@ -175,6 +175,8 @@ Any static host works, for example Netlify, Cloudflare Pages, Vercel or GitHub P
 - Make sure `/app` serves `app.html`. Most hosts do this by default ("clean URLs").
 - Serve `sw.js` with `Cache-Control: no-cache`.
 
+For GitHub Pages, `npm run deploy` builds the site and commits it to the `gh-pages` branch, then pushes it. The commit message is the current commit's subject plus a timestamp. It also adds `.nojekyll` and, for a custom domain, a `CNAME` taken from `SITE_URL`. The working tree must be clean. Pass `-- --no-push` to commit without pushing. In the repository settings, under Pages, choose "Deploy from a branch" and select `gh-pages` / root.
+
 ## Browser support
 
 The targets are current Chrome, Edge, Safari and Firefox:

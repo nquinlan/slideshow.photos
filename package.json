@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "bench": "node bench/run-bench.mjs",
     "spike": "vite --config spike/vite.config.ts",
-    "gen:assets": "node scripts/gen-assets.mjs"
+    "gen:assets": "node scripts/gen-assets.mjs",
+    "deploy": "node scripts/deploy-gh-pages.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",
