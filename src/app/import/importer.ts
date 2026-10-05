@@ -24,6 +24,11 @@ export interface ImportItem {
   googleId?: string;
   /** Source size in bytes when known up front (for estimates). */
   size?: number;
+  /**
+   * The original photo's pixel size when the bytes we load are a pre-sized
+   * rendition (Google Photos), so playback knows how far it may scale up.
+   */
+  originalSize?: { width: number; height: number };
   /** Fetch the source bytes. `cap` lets remote sources request a pre-sized rendition. */
   load(signal: AbortSignal, cap: number): Promise<Blob>;
 }
@@ -179,8 +184,8 @@ export function runImport(pool: PipelinePool, opts: ImportOptions): ImportHandle
           name: item.name,
           width: r.width,
           height: r.height,
-          sourceWidth: r.sourceWidth,
-          sourceHeight: r.sourceHeight,
+          sourceWidth: Math.max(r.sourceWidth, item.originalSize?.width ?? 0),
+          sourceHeight: Math.max(r.sourceHeight, item.originalSize?.height ?? 0),
           format: r.format,
           tier: opts.tier,
           cap,

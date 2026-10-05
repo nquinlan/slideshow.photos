@@ -93,6 +93,10 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
       key: m.id,
       name: m.mediaFile.filename || 'Google Photos item',
       googleId: m.id,
+      originalSize:
+        m.mediaFile.mediaFileMetadata?.width && m.mediaFile.mediaFileMetadata?.height
+          ? { width: m.mediaFile.mediaFileMetadata.width, height: m.mediaFile.mediaFileMetadata.height }
+          : undefined,
       load: (signal, cap) => {
         // Signed out (Disconnect) or expired mid-import: pause so it can resume after a fresh sign-in.
         const t = tokenRef.current;

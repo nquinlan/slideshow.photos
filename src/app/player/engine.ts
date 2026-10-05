@@ -9,7 +9,7 @@
  */
 import type { PlaybackSettings } from '../db/db';
 import { effectiveFormat } from '../formats';
-import { resolveSettings, type FormatInstance, type SlideImage, type Viewport } from '../formats/types';
+import { resolveSettings, type FormatInstance, type PhotoInfo, type SlideImage, type Viewport } from '../formats/types';
 
 export interface EngineState {
   /** Position in the (possibly shuffled) playlist. */
@@ -23,7 +23,7 @@ export interface EngineState {
 
 export interface EngineOptions {
   canvas: HTMLCanvasElement;
-  photoIds: string[];
+  photos: PhotoInfo[];
   settings: PlaybackSettings;
   reducedMotion: boolean;
   viewport: Viewport;
@@ -93,7 +93,7 @@ export class SlideshowEngine {
     return {
       position: this.pos,
       total,
-      photoId: total ? this.o.photoIds[this.order[this.pos]] : undefined,
+      photoId: total ? this.o.photos[this.order[this.pos]].id : undefined,
       paused: this.paused,
       ready: this.ready,
       error: this.error,
@@ -191,11 +191,11 @@ export class SlideshowEngine {
   }
 
   private buildOrder(keepFirstIdx?: number) {
-    const n = this.o.photoIds.length;
+    const n = this.o.photos.length;
     this.order = this.o.settings.shuffle ? shuffledOrder(n, this.o.random) : Array.from({ length: n }, (_, i) => i);
     const want =
       keepFirstIdx ??
-      (this.o.startPhotoId !== undefined ? this.o.photoIds.indexOf(this.o.startPhotoId) : -1);
+      (this.o.startPhotoId !== undefined ? this.o.photos.findIndex((p) => p.id === this.o.startPhotoId) : -1);
     this.pos = want >= 0 ? Math.max(0, this.order.indexOf(want)) : 0;
   }
 
@@ -221,10 +221,15 @@ export class SlideshowEngine {
   private get(position: number): Promise<Decoded | null> {
     let p = this.cache.get(position);
     if (!p) {
-      const id = this.o.photoIds[this.order[position]];
+      const info = this.o.photos[this.order[position]];
       p = this.o
-        .loadBlob(id)
+        .loadBlob(info.id)
         .then((b) => (b ? this.decode(b) : null))
+        .then((d) => {
+          // Scale limit relative to the decoded bitmap (it may be smaller than the stored copy).
+          if (d) d.maxScale = info.maxScale * (info.width / (d.width || info.width));
+          return d;
+        })
         .catch(() => null)
         .then((d) => {
           // Evicted (or engine destroyed) while decoding: release immediately.

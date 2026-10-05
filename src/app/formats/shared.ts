@@ -42,8 +42,13 @@ export function ctx2d(c: Surface): CanvasRenderingContext2D {
   return ctx;
 }
 
-export function fitRect(iw: number, ih: number, w: number, h: number, mode: 'contain' | 'cover') {
-  const k = mode === 'cover' ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+/**
+ * Fit an iw×ih image into w×h (contain or cover), centred. `maxScale` caps the
+ * scale so small photos are never blown up beyond their original resolution;
+ * they're shown centred at that size instead.
+ */
+export function fitRect(iw: number, ih: number, w: number, h: number, mode: 'contain' | 'cover', maxScale = Infinity) {
+  const k = Math.min(maxScale, mode === 'cover' ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih));
   const dw = iw * k;
   const dh = ih * k;
   return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh };
@@ -63,8 +68,8 @@ export function composeSlide(target: Surface, img: SlideImage, render: RenderOpt
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
-  const r = fitRect(img.width, img.height, W, H, render.fit);
-  const fillsStage = r.x <= 0.5 && r.y <= 0.5;
+  const r = fitRect(img.width, img.height, W, H, render.fit, img.maxScale);
+  const fillsStage = r.x <= 0.5 && r.y <= 0.5 && r.x + r.w >= W - 0.5 && r.y + r.h >= H - 0.5;
   if (render.backdrop === 'blur' && !fillsStage) drawBlurBackdrop(ctx, img, W, H);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';

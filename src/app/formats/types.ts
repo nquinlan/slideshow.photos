@@ -51,6 +51,22 @@ export interface SlideImage {
   source: CanvasImageSource;
   width: number;
   height: number;
+  /**
+   * Largest scale (destination px per source px) this image may be drawn at
+   * without exceeding the original photo's resolution. Formats must not
+   * upscale beyond it. Undefined = no limit (e.g. synthetic images in tests).
+   */
+  maxScale?: number;
+}
+
+/** What the player knows about each photo before decoding it. */
+export interface PhotoInfo {
+  id: string;
+  /** Stored derivative size in px. */
+  width: number;
+  height: number;
+  /** Max scale of the stored derivative before exceeding the original (≥ 1). */
+  maxScale: number;
 }
 
 export interface FormatContext {

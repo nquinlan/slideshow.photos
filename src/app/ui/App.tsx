@@ -25,7 +25,9 @@ import { importService, type Batch, type ImportServiceState } from '../import/se
 import { checkImportFits, estimateImportBytes, requestPersistence } from '../import/storage';
 import { canEncodeWebP } from '../pipeline/webp';
 import type { QualityTier } from '../pipeline/sizing';
+import type { PhotoInfo } from '../formats/types';
 import { enterFullscreen } from '../player/fullscreen';
+import { toPhotoInfo } from '../player/photos';
 import { GooglePhotosImport } from './GooglePhotos';
 import { useOnline, useStorageInfo } from './hooks';
 import { ImportConfirmDialog, ImportPanel, InterruptedJobs, StorageMeter, type PendingImport } from './ImportUI';
@@ -50,7 +52,7 @@ export default function App() {
   const [pending, setPending] = useState<
     (PendingImport & { items: ImportItem[]; source: Batch['source']; extra?: Partial<Batch>; originalsBytes: number }) | null
   >(null);
-  const [playing, setPlaying] = useState<{ startPhotoId?: string; ids: string[] } | null>(null);
+  const [playing, setPlaying] = useState<{ startPhotoId?: string; photos: PhotoInfo[] } | null>(null);
   const [interrupted, setInterrupted] = useState<ImportJob[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [usage, setUsage] = useState<LibraryUsage>();
@@ -234,7 +236,7 @@ export default function App() {
     if (!collection || !photos.length) return;
     // Mount the player synchronously so requestFullscreen() runs inside the
     // click's user activation (required by every browser).
-    flushSync(() => setPlaying({ startPhotoId, ids: photos.map((p) => p.id) }));
+    flushSync(() => setPlaying({ startPhotoId, photos: photos.map(toPhotoInfo) }));
     const el = playerRef.current?.element;
     if (el) void enterFullscreen(el);
   }
@@ -248,7 +250,7 @@ export default function App() {
     return (
       <Player
         ref={playerRef}
-        photoIds={playing.ids}
+        photos={playing.photos}
         startPhotoId={playing.startPhotoId}
         settings={collection.settings}
         onExit={stopPlaying}

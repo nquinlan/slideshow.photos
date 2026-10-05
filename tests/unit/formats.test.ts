@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS, effectiveFormat, getFormat } from '../../src/app/formats';
 import { EASINGS, animate, fitRect, stageSize, type Scheduler } from '../../src/app/formats/shared';
+import { toPhotoInfo } from '../../src/app/player/photos';
 import { drawTile, layoutTiles, slidingTiles, tileProgress, type SlidingTilesSettings } from '../../src/app/formats/slidingTiles';
 import { defaultSettings, resolveSettings } from '../../src/app/formats/types';
 
@@ -110,6 +111,20 @@ describe('shared helpers', () => {
     const cover = fitRect(400, 300, 800, 800, 'cover');
     expect(cover.h).toBe(800);
     expect(cover.x).toBeLessThan(0);
+  });
+
+  it('fitRect never scales beyond maxScale (no upscaling small photos)', () => {
+    // 640x480 photo on a 1920x1080 stage: contain would scale 2.25x; capped at 1 it stays centred at native size.
+    expect(fitRect(640, 480, 1920, 1080, 'contain', 1)).toEqual({ x: 640, y: 300, w: 640, h: 480 });
+    expect(fitRect(640, 480, 1920, 1080, 'cover', 1)).toEqual({ x: 640, y: 300, w: 640, h: 480 });
+    // A capped 2560px copy of a 4032px original may fill a 2880px stage (scale 1.125 <= 1.575).
+    const r = fitRect(2560, 1920, 2880, 1800, 'contain', 4032 / 2560);
+    expect(r.h).toBe(1800);
+  });
+
+  it('toPhotoInfo allows scaling up to the original, never below 1', () => {
+    expect(toPhotoInfo({ id: 'a', width: 2560, height: 1920, sourceWidth: 4032, sourceHeight: 3024 }).maxScale).toBeCloseTo(1.575);
+    expect(toPhotoInfo({ id: 'b', width: 640, height: 480, sourceWidth: 640, sourceHeight: 480 }).maxScale).toBe(1);
   });
 
   it('stageSize uses device pixels but caps at 4K', () => {

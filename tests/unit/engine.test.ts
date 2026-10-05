@@ -31,7 +31,7 @@ function setup(ids: string[], over: Partial<PlaybackSettings> = {}, broken: stri
   const settings: PlaybackSettings = { ...DEFAULT_PLAYBACK, formatId: 'test-recorder', transitionMs: 500, ...over };
   const engine = new SlideshowEngine({
     canvas: {} as HTMLCanvasElement,
-    photoIds: ids,
+    photos: ids.map((id) => ({ id, width: 10, height: 10, maxScale: 1.5 })),
     settings,
     reducedMotion: false,
     viewport: { width: 100, height: 100, devicePixelRatio: 1 },
@@ -129,5 +129,17 @@ describe('SlideshowEngine', () => {
     const { engine, states } = setup([]);
     await engine.start();
     expect(states.at(-1)?.error).toMatch(/no photos/);
+  });
+
+  it('passes each photo\'s upscale limit to the format, relative to the decoded size', async () => {
+    const seen: (number | undefined)[] = [];
+    FORMATS.push({
+      ...recorder,
+      id: 'test-maxscale',
+      create: (ctx, st) => ({ ...recorder.create(ctx, st), init: (img: SlideImage) => void seen.push(img.maxScale) }),
+    });
+    const { engine } = setup(['a', 'b'], { formatId: 'test-maxscale' });
+    await engine.start();
+    expect(seen).toEqual([1.5]); // decoded at the stored 10x10 size
   });
 });

@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { PlaybackSettings } from '../db/db';
 import { getDisplay } from '../db/repo';
+import type { PhotoInfo } from '../formats/types';
 import { SlideshowEngine, type EngineState } from '../player/engine';
 import {
   EscapeController,
@@ -14,7 +15,7 @@ import { WakeLockGuard } from '../player/wakeLock';
 import { useReducedMotion } from './hooks';
 
 interface Props {
-  photoIds: string[];
+  photos: PhotoInfo[];
   settings: PlaybackSettings;
   startPhotoId?: string;
   onExit(): void;
@@ -27,7 +28,7 @@ export interface PlayerHandle {
 const IDLE_MS = 2500;
 const SWIPE_PX = 50;
 
-export const Player = forwardRef<PlayerHandle, Props>(function Player({ photoIds, settings, startPhotoId, onExit }, ref) {
+export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, settings, startPhotoId, onExit }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<SlideshowEngine | null>(null);
@@ -48,7 +49,7 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photoIds
     const root = rootRef.current!;
     const engine = new SlideshowEngine({
       canvas,
-      photoIds,
+      photos,
       settings,
       reducedMotion,
       startPhotoId,
@@ -72,7 +73,7 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photoIds
       void exitFullscreen();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoIds]);
+  }, [photos]);
 
   // Live settings / reduced-motion changes.
   useEffect(() => {
