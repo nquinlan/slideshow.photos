@@ -27,7 +27,7 @@ import {
   type EasingName,
   type Surface,
 } from './shared';
-import type { FormatContext, FormatInstance, FormatSettings, RenderOptions, SlideImage, SlideshowFormat, Viewport } from './types';
+import type { FormatContext, FormatInstance, FormatSettings, RenderOptions, SlideImage, TransitionFormat, Viewport } from './types';
 
 export type Direction = 'left' | 'right' | 'up' | 'down';
 export type DirectionSetting = Direction | 'alternate' | 'random';
@@ -222,10 +222,12 @@ class SlidingTilesInstance implements FormatInstance {
   }
 }
 
-export const slidingTiles: SlideshowFormat<SlidingTilesSettings> = {
+export const slidingTiles: TransitionFormat<SlidingTilesSettings> = {
+  kind: 'transition',
   id: 'sliding-tiles',
   name: 'Sliding Tiles',
   description: 'The photo splits into a grid of tiles that slide away to reveal the next one.',
+  uses: { interval: 'Show each photo for', transition: true, shuffle: true, fit: true, backdrop: true },
   settingsSchema: [
     { key: 'cols', label: 'Columns', type: 'number', min: 1, max: 16, step: 1, default: 6 },
     { key: 'rows', label: 'Rows', type: 'number', min: 1, max: 12, step: 1, default: 4 },

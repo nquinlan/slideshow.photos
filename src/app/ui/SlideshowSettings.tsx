@@ -15,6 +15,8 @@ export function SlideshowSettings({ settings, onChange }: Props) {
   const reducedMotion = useReducedMotion();
   const format = getFormat(settings.formatId);
   const formatValues = resolveSettings(format.settingsSchema, settings.formatSettings[format.id]);
+  // When reduced motion swaps in Crossfade, show the settings that will actually apply.
+  const uses = (reducedMotion ? getFormat(REDUCED_MOTION_FORMAT_ID) : format).uses;
   const set = (patch: Partial<PlaybackSettings>) => onChange({ ...settings, ...patch });
   const setFormatValue = (key: string, value: unknown) =>
     set({ formatSettings: { ...settings.formatSettings, [format.id]: { ...formatValues, [key]: value } } });
@@ -36,55 +38,67 @@ export function SlideshowSettings({ settings, onChange }: Props) {
         )}
       </div>
 
-      <Range
-        id={`${id}-interval`}
-        label="Show each photo for"
-        min={2}
-        max={60}
-        step={1}
-        value={settings.intervalSec}
-        format={(v) => `${v}s`}
-        onChange={(v) => set({ intervalSec: v })}
-      />
-      <Range
-        id={`${id}-transition`}
-        label="Transition speed"
-        min={300}
-        max={4000}
-        step={100}
-        value={settings.transitionMs}
-        format={(v) => `${(v / 1000).toFixed(1)}s`}
-        onChange={(v) => set({ transitionMs: v })}
-      />
-      <div className="field field-inline">
-        <input
-          id={`${id}-shuffle`}
-          type="checkbox"
-          checked={settings.shuffle}
-          onChange={(e) => set({ shuffle: e.target.checked })}
+      {uses.interval && (
+        <Range
+          id={`${id}-interval`}
+          label={uses.interval}
+          min={2}
+          max={60}
+          step={1}
+          value={settings.intervalSec}
+          format={(v) => `${v}s`}
+          onChange={(v) => set({ intervalSec: v })}
         />
-        <label htmlFor={`${id}-shuffle`}>Shuffle</label>
-      </div>
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor={`${id}-fit`}>Fit</label>
-          <select id={`${id}-fit`} value={settings.fit} onChange={(e) => set({ fit: e.target.value as PlaybackSettings['fit'] })}>
-            <option value="contain">Whole photo</option>
-            <option value="cover">Fill screen (crop)</option>
-          </select>
+      )}
+      {uses.transition && (
+        <Range
+          id={`${id}-transition`}
+          label="Transition speed"
+          min={300}
+          max={4000}
+          step={100}
+          value={settings.transitionMs}
+          format={(v) => `${(v / 1000).toFixed(1)}s`}
+          onChange={(v) => set({ transitionMs: v })}
+        />
+      )}
+      {uses.shuffle && (
+        <div className="field field-inline">
+          <input
+            id={`${id}-shuffle`}
+            type="checkbox"
+            checked={settings.shuffle}
+            onChange={(e) => set({ shuffle: e.target.checked })}
+          />
+          <label htmlFor={`${id}-shuffle`}>Shuffle</label>
         </div>
-        <div className="field">
-          <label htmlFor={`${id}-backdrop`}>Background</label>
-          <select
-            id={`${id}-backdrop`}
-            value={settings.backdrop}
-            onChange={(e) => set({ backdrop: e.target.value as PlaybackSettings['backdrop'] })}
-          >
-            <option value="blur">Blurred photo</option>
-            <option value="black">Black</option>
-          </select>
+      )}
+      {(uses.fit || uses.backdrop) && (
+        <div className="field-row">
+          {uses.fit && (
+            <div className="field">
+              <label htmlFor={`${id}-fit`}>Fit</label>
+              <select id={`${id}-fit`} value={settings.fit} onChange={(e) => set({ fit: e.target.value as PlaybackSettings['fit'] })}>
+                <option value="contain">Whole photo</option>
+                <option value="cover">Fill screen (crop)</option>
+              </select>
+            </div>
+          )}
+          {uses.backdrop && (
+            <div className="field">
+              <label htmlFor={`${id}-backdrop`}>Background</label>
+              <select
+                id={`${id}-backdrop`}
+                value={settings.backdrop}
+                onChange={(e) => set({ backdrop: e.target.value as PlaybackSettings['backdrop'] })}
+              >
+                <option value="blur">Blurred photo</option>
+                <option value="black">Black</option>
+              </select>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {format.settingsSchema.length > 0 && (
         <details className="format-options">

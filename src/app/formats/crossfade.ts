@@ -3,7 +3,7 @@
  * `prefers-reduced-motion: reduce`, and selectable like any other format.
  */
 import { EASINGS, animate, composeSlide, createSurface, ctx2d, sizeCanvas, stageSize, type Surface } from './shared';
-import type { FormatContext, FormatInstance, RenderOptions, SlideImage, SlideshowFormat, Viewport } from './types';
+import type { FormatContext, FormatInstance, RenderOptions, SlideImage, TransitionFormat, Viewport } from './types';
 
 class CrossfadeInstance implements FormatInstance {
   private ctx: CanvasRenderingContext2D;
@@ -66,10 +66,12 @@ class CrossfadeInstance implements FormatInstance {
   }
 }
 
-export const crossfade: SlideshowFormat = {
+export const crossfade: TransitionFormat = {
+  kind: 'transition',
   id: 'crossfade',
   name: 'Crossfade',
   description: 'A gentle fade between photos. Used automatically when your system asks for reduced motion.',
   settingsSchema: [],
+  uses: { interval: 'Show each photo for', transition: true, shuffle: true, fit: true, backdrop: true },
   create: (ctx) => new CrossfadeInstance(ctx),
 };

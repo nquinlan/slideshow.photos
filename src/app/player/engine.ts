@@ -1,19 +1,34 @@
 /**
- * Slideshow engine: playlist, timing, decode/preload window, navigation.
- * Knows nothing about how transitions look – that's the SlideshowFormat's job.
+ * Slideshow engine: runs the active format and owns the plumbing around it.
  *
- * Memory: only the current photo and the next `lookahead` photos are kept
- * decoded (ImageBitmap ≈ w×h×4 bytes each; a 2560×1440 derivative is ~15 MB).
- * Everything else is closed immediately. Decoding uses createImageBitmap,
- * which browsers perform off the main thread.
+ * Transition formats: the engine owns the playlist (order, shuffle), timing,
+ * decode/preload window and coalesced navigation, and asks the format to
+ * animate from one photo to the next.
+ * Scene formats: the format runs its own loop; the engine hands it a
+ * PhotoLibrary and forwards pause/resume/next/prev/resize.
+ *
+ * Memory (transition formats): only the current photo and the next
+ * `lookahead` photos are kept decoded (ImageBitmap ≈ w×h×4 bytes each; a
+ * 2560×1440 derivative is ~15 MB). Everything else is closed immediately.
+ * Decoding uses createImageBitmap, which browsers perform off the main thread.
  */
 import type { PlaybackSettings } from '../db/db';
 import { effectiveFormat } from '../formats';
-import { resolveSettings, type FormatInstance, type PhotoInfo, type SlideImage, type Viewport } from '../formats/types';
+import {
+  resolveSettings,
+  type FormatInstance,
+  type LoadedPhoto,
+  type PhotoInfo,
+  type PhotoLibrary,
+  type SceneInstance,
+  type Viewport,
+} from '../formats/types';
+import { createLibrary, type Decoder } from './library';
 
 export interface EngineState {
-  /** Position in the (possibly shuffled) playlist. */
+  /** Position in the playlist (transition formats) or the scene's step counter. */
   position: number;
+  /** Playlist length for transition formats; 0 for scenes (no fixed sequence). */
   total: number;
   photoId: string | undefined;
   paused: boolean;
@@ -33,13 +48,11 @@ export interface EngineOptions {
   startPhotoId?: string;
   lookahead?: number;
   /** Injectable for tests. */
-  decode?: (blob: Blob) => Promise<SlideImage & { close?: () => void }>;
+  decode?: Decoder;
   random?: () => number;
   setTimer?: (cb: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
 }
-
-type Decoded = SlideImage & { close?: () => void };
 
 export function shuffledOrder(n: number, random: () => number = Math.random): number[] {
   const a = Array.from({ length: n }, (_, i) => i);
@@ -52,11 +65,6 @@ export function shuffledOrder(n: number, random: () => number = Math.random): nu
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
-async function decodeBitmap(blob: Blob): Promise<Decoded> {
-  const bmp = await createImageBitmap(blob);
-  return { source: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close() };
-}
-
 export class SlideshowEngine {
   private order: number[] = [];
   private pos = 0;
@@ -64,31 +72,43 @@ export class SlideshowEngine {
   private ready = false;
   private destroyed = false;
   private error?: string;
-  private format!: FormatInstance;
+  private format?: FormatInstance;
+  private scene?: SceneInstance;
+  private scenePosition = 0;
   private formatKey = '';
-  private cache = new Map<number, Promise<Decoded | null>>();
+  private readonly library: PhotoLibrary;
+  private cache = new Map<number, Promise<LoadedPhoto | null>>();
   /** Decoded bitmaps currently held by the cache, by playlist position. */
-  private resolved = new Map<number, Decoded>();
-  private current?: Decoded;
+  private resolved = new Map<number, LoadedPhoto>();
+  private current?: LoadedPhoto;
   private timer: unknown;
   private pendingStep = 0;
   private running = false;
   private abort?: AbortController;
   private readonly lookahead: number;
-  private readonly decode: (b: Blob) => Promise<Decoded>;
   private readonly setTimer: (cb: () => void, ms: number) => unknown;
   private readonly clearTimer: (h: unknown) => void;
 
   constructor(private o: EngineOptions) {
     this.lookahead = o.lookahead ?? 3;
-    this.decode = o.decode ?? decodeBitmap;
     this.setTimer = o.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
     this.clearTimer = o.clearTimer ?? ((h) => clearTimeout(h as number));
+    this.library = createLibrary(o.photos, o.loadBlob, o.decode);
     this.buildOrder();
     this.createFormat();
   }
 
   get state(): EngineState {
+    if (this.scene) {
+      return {
+        position: this.scenePosition,
+        total: 0,
+        photoId: undefined,
+        paused: this.paused,
+        ready: this.ready,
+        error: this.error,
+      };
+    }
     const total = this.order.length;
     return {
       position: this.pos,
@@ -105,13 +125,14 @@ export class SlideshowEngine {
       this.error = 'This collection has no photos yet.';
       return this.emit();
     }
+    if (this.scene) return this.startScene(this.scene);
     let first = await this.get(this.pos);
     // Skip unreadable photos at the start.
     for (let tries = 1; !first && tries < this.order.length && !this.destroyed; tries++) {
       this.pos = mod(this.pos + 1, this.order.length);
       first = await this.get(this.pos);
     }
-    if (this.destroyed) return;
+    if (this.destroyed || !this.format) return;
     if (!first) {
       this.error = 'None of the photos in this collection could be decoded.';
       return this.emit();
@@ -125,19 +146,23 @@ export class SlideshowEngine {
   }
 
   next() {
+    if (this.scene) return this.scene.next();
     this.request(1);
   }
   prev() {
+    if (this.scene) return this.scene.prev();
     this.request(-1);
   }
 
   pause() {
     this.paused = true;
     this.cancelTimer();
+    this.scene?.pause();
     this.emit();
   }
   resume() {
     this.paused = false;
+    this.scene?.resume();
     this.emit();
     this.schedule();
   }
@@ -148,7 +173,7 @@ export class SlideshowEngine {
 
   resize(v: Viewport) {
     this.o.viewport = v;
-    this.format.resize(v);
+    (this.scene ?? this.format)?.resize(v);
   }
 
   /** Apply new settings live. Recreates the format only if it (or its settings) changed. */
@@ -163,24 +188,38 @@ export class SlideshowEngine {
     }
     const key = this.computeFormatKey();
     if (key !== this.formatKey) {
-      this.abort?.abort();
-      this.format.destroy();
+      const wasScene = !!this.scene;
+      this.teardownFormat();
       this.createFormat();
-      if (this.current) this.format.init(this.current);
+      if (this.scene) {
+        if (this.ready) void this.startScene(this.scene);
+      } else if (this.format && this.current && !wasScene) {
+        this.format.init(this.current);
+      } else if (this.ready) {
+        // Switched from a scene to a transition format: load the current playlist photo.
+        this.ready = false;
+        void this.start();
+        return;
+      }
+    } else if (this.scene) {
+      this.scene.setRenderOptions({ fit: settings.fit, backdrop: settings.backdrop });
+      this.scene.setTiming(this.timing());
+      return;
     } else {
-      this.format.setRenderOptions({ fit: settings.fit, backdrop: settings.backdrop });
+      this.format?.setRenderOptions({ fit: settings.fit, backdrop: settings.backdrop });
     }
-    this.preload();
-    this.schedule();
+    if (!this.scene) {
+      this.preload();
+      this.schedule();
+    }
   }
 
   destroy() {
     this.destroyed = true;
     this.cancelTimer();
-    this.abort?.abort();
-    this.format.destroy();
+    this.teardownFormat();
     this.dropCache();
-    this.current?.close?.();
+    this.current?.close();
     this.current = undefined;
   }
 
@@ -188,6 +227,24 @@ export class SlideshowEngine {
 
   private emit() {
     if (!this.destroyed) this.o.onState(this.state);
+  }
+
+  private timing() {
+    return { intervalMs: this.o.settings.intervalSec * 1000, transitionMs: this.o.settings.transitionMs };
+  }
+
+  private async startScene(scene: SceneInstance) {
+    try {
+      await scene.start();
+    } catch (e) {
+      if (scene !== this.scene) return;
+      this.error = (e as Error).message || 'This slideshow format could not start.';
+      return this.emit();
+    }
+    if (this.destroyed || scene !== this.scene) return;
+    if (this.paused) scene.pause();
+    this.ready = true;
+    this.emit();
   }
 
   private buildOrder(keepFirstIdx?: number) {
@@ -207,37 +264,58 @@ export class SlideshowEngine {
   private createFormat() {
     const f = effectiveFormat(this.o.settings.formatId, this.o.reducedMotion);
     const settings = resolveSettings(f.settingsSchema, this.o.settings.formatSettings[f.id]);
-    this.format = f.create(
-      {
-        canvas: this.o.canvas,
-        viewport: this.o.viewport,
-        render: { fit: this.o.settings.fit, backdrop: this.o.settings.backdrop },
-      },
-      settings,
-    );
+    const ctx = {
+      canvas: this.o.canvas,
+      viewport: this.o.viewport,
+      render: { fit: this.o.settings.fit, backdrop: this.o.settings.backdrop },
+    };
+    if (f.kind === 'scene') {
+      this.scenePosition = 0;
+      const scene: SceneInstance = f.create(
+        {
+          ...ctx,
+          library: this.library,
+          timing: this.timing(),
+          random: this.o.random ?? Math.random,
+          onStatus: (s) => {
+            if (scene !== this.scene) return;
+            this.scenePosition = s.position;
+            this.emit();
+          },
+        },
+        settings,
+      );
+      this.scene = scene;
+      // Scenes decode their own photos; release the transition playlist's bitmaps.
+      this.dropCache();
+      this.current?.close();
+      this.current = undefined;
+    } else {
+      this.format = f.create(ctx, settings);
+    }
     this.formatKey = this.computeFormatKey();
   }
 
-  private get(position: number): Promise<Decoded | null> {
+  private teardownFormat() {
+    this.cancelTimer();
+    this.abort?.abort();
+    this.scene?.destroy();
+    this.scene = undefined;
+    this.format?.destroy();
+    this.format = undefined;
+  }
+
+  private get(position: number): Promise<LoadedPhoto | null> {
     let p = this.cache.get(position);
     if (!p) {
       const info = this.o.photos[this.order[position]];
-      p = this.o
-        .loadBlob(info.id)
-        .then((b) => (b ? this.decode(b) : null))
-        .then((d) => {
-          // Scale limit relative to the decoded bitmap (it may be smaller than the stored copy).
-          if (d) d.maxScale = info.maxScale * (info.width / (d.width || info.width));
-          return d;
-        })
-        .catch(() => null)
-        .then((d) => {
-          // Evicted (or engine destroyed) while decoding: release immediately.
-          if (d && (this.destroyed || this.cache.get(position) !== p)) {
-            if (d !== this.current) d.close?.();
-          } else if (d) this.resolved.set(position, d);
-          return d;
-        });
+      p = this.library.load(info.id).then((d) => {
+        // Evicted (or engine destroyed) while decoding: release immediately.
+        if (d && (this.destroyed || this.cache.get(position) !== p)) {
+          if (d !== this.current) d.close();
+        } else if (d) this.resolved.set(position, d);
+        return d;
+      });
       this.cache.set(position, p);
     }
     return p;
@@ -247,7 +325,7 @@ export class SlideshowEngine {
     this.cache.delete(position);
     const d = this.resolved.get(position);
     this.resolved.delete(position);
-    if (d && d !== this.current) d.close?.();
+    if (d && d !== this.current) d.close();
   }
 
   /** Keep current + next `lookahead` decoded; release everything else. */
@@ -265,7 +343,7 @@ export class SlideshowEngine {
 
   private schedule() {
     this.cancelTimer();
-    if (this.paused || !this.ready || this.destroyed || this.order.length < 2 || this.running) return;
+    if (this.scene || this.paused || !this.ready || this.destroyed || this.order.length < 2 || this.running) return;
     this.timer = this.setTimer(() => this.request(1, false), this.o.settings.intervalSec * 1000);
   }
 
@@ -280,7 +358,7 @@ export class SlideshowEngine {
    * finishes that transition instantly.
    */
   private request(step: number, manual = true) {
-    if (!this.ready || this.order.length < 2) return;
+    if (!this.ready || this.order.length < 2 || !this.format) return;
     this.pendingStep += step;
     this.cancelTimer();
     if (manual) this.abort?.abort();
@@ -291,12 +369,12 @@ export class SlideshowEngine {
     this.running = true;
     const n = this.order.length;
     let badStreak = 0;
-    while (this.pendingStep !== 0 && !this.destroyed) {
+    while (this.pendingStep !== 0 && !this.destroyed && this.format) {
       const step = this.pendingStep;
       this.pendingStep = 0;
       const target = mod(this.pos + step, n);
       const img = await this.get(target);
-      if (this.destroyed) break;
+      if (this.destroyed || !this.format) break;
       if (!img) {
         // Unreadable photo: drop it from the cache and keep going in the same direction.
         this.evict(target);
@@ -319,7 +397,7 @@ export class SlideshowEngine {
       const prevCached = !!previous && [...this.resolved.values()].includes(previous);
       this.current = img;
       this.preload();
-      if (previous && previous !== img && !prevCached) previous.close?.();
+      if (previous && previous !== img && !prevCached) previous.close();
     }
     this.running = false;
     this.schedule();

@@ -188,6 +188,7 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
   };
 
   const paused = state?.paused ?? false;
+  // Scene formats (collages, floating) have no fixed sequence, so no "n / total" counter.
   const counter = state && state.total ? `${state.position + 1} / ${state.total}` : '';
 
   return (
@@ -230,9 +231,11 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
         <button type="button" onClick={() => engineRef.current?.next()} aria-label="Next photo" title="Next (→)">
           <Icon d="m8.5 5 7 7-7 7" stroke />
         </button>
-        <span className="player-counter" aria-label={`Photo ${counter.replace(' / ', ' of ')}`}>
-          {counter}
-        </span>
+        {counter && (
+          <span className="player-counter" aria-label={`Photo ${counter.replace(' / ', ' of ')}`}>
+            {counter}
+          </span>
+        )}
         <span className="spacer" />
         {fullscreenSupported() && (
           <button

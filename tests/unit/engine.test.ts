@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PLAYBACK, type PlaybackSettings } from '../../src/app/db/db';
 import { FORMATS } from '../../src/app/formats';
-import type { FormatInstance, SlideImage, SlideshowFormat } from '../../src/app/formats/types';
+import type {
+  FormatInstance,
+  LoadedPhoto,
+  SceneContext,
+  SceneFormat,
+  SceneInstance,
+  SlideImage,
+  TransitionFormat,
+} from '../../src/app/formats/types';
 import { SlideshowEngine, shuffledOrder, type EngineState } from '../../src/app/player/engine';
 
 /** A recording format registered at runtime — no core changes needed to add one. */
 const log: string[] = [];
-const recorder: SlideshowFormat = {
+const recorder: TransitionFormat = {
+  kind: 'transition',
+  uses: { interval: 'Interval', transition: true, shuffle: true, fit: true, backdrop: true },
   id: 'test-recorder',
   name: 'Recorder',
   description: 'test',
@@ -133,13 +143,72 @@ describe('SlideshowEngine', () => {
 
   it('passes each photo\'s upscale limit to the format, relative to the decoded size', async () => {
     const seen: (number | undefined)[] = [];
-    FORMATS.push({
+    const maxScaleFormat: TransitionFormat = {
       ...recorder,
       id: 'test-maxscale',
       create: (ctx, st) => ({ ...recorder.create(ctx, st), init: (img: SlideImage) => void seen.push(img.maxScale) }),
-    });
+    };
+    FORMATS.push(maxScaleFormat);
     const { engine } = setup(['a', 'b'], { formatId: 'test-maxscale' });
     await engine.start();
     expect(seen).toEqual([1.5]); // decoded at the stored 10x10 size
+  });
+
+  it('runs scene formats: delegates controls, reports status, and they load via the library', async () => {
+    const calls: string[] = [];
+    const loaded: LoadedPhoto[] = [];
+    let ctxSeen: SceneContext | undefined;
+    const scene: SceneFormat = {
+      kind: 'scene',
+      id: 'test-scene',
+      name: 'Scene',
+      description: 'test',
+      settingsSchema: [],
+      uses: { interval: 'Hold', transition: true, shuffle: false, fit: false, backdrop: false },
+      create: (ctx): SceneInstance => {
+        ctxSeen = ctx;
+        return {
+          start: async () => {
+            const p = await ctx.library.load('b', { width: 5, height: 5 });
+            if (p) loaded.push(p);
+            ctx.onStatus({ position: 7 });
+          },
+          pause: () => void calls.push('pause'),
+          resume: () => void calls.push('resume'),
+          next: () => void calls.push('next'),
+          prev: () => void calls.push('prev'),
+          resize: () => void calls.push('resize'),
+          setRenderOptions: () => void calls.push('render'),
+          setTiming: (t) => void calls.push(`timing:${t.intervalMs}`),
+          destroy: () => {
+            calls.push('destroy');
+            loaded.forEach((p) => p.close());
+          },
+        };
+      },
+    };
+    FORMATS.push(scene);
+    const { engine, closed, settings, states, timers } = setup(['a', 'b', 'c'], { formatId: 'test-scene', intervalSec: 4 });
+    await engine.start();
+    expect(ctxSeen?.library.photos.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+    expect(ctxSeen?.timing).toEqual({ intervalMs: 4000, transitionMs: 500 });
+    expect(loaded.map((p) => p.id)).toEqual(['b']);
+    expect(states.at(-1)).toMatchObject({ ready: true, position: 7, total: 0 });
+    expect(timers).toHaveLength(0); // scenes own their timing
+
+    engine.next();
+    engine.prev();
+    engine.pause();
+    engine.resume();
+    engine.updateSettings({ ...settings, intervalSec: 9 });
+    expect(calls).toEqual(['next', 'prev', 'pause', 'resume', 'render', 'timing:9000']);
+
+    // Switching to a transition format tears the scene down and plays the playlist.
+    engine.updateSettings({ ...settings, intervalSec: 9, formatId: 'test-recorder' });
+    expect(calls).toContain('destroy');
+    expect(closed).toContain('b');
+    for (let i = 0; i < 4; i++) await flush();
+    expect(log).toContain('init:a:2');
+    expect(engine.state.total).toBe(3);
   });
 });

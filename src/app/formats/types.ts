@@ -1,12 +1,22 @@
 /**
  * Slideshow format plugin interface.
  *
- * The player core (player/engine.ts) owns *what* is shown and *when*:
- * playlist order, decoding/preloading, timers, input, full-screen. A format
- * owns only *how* one image becomes the next on a canvas. Adding a format
- * means implementing `SlideshowFormat` and registering it in formats/index.ts;
- * no core changes. Its `settingsSchema` is rendered automatically by the
- * settings UI and its values are persisted per collection.
+ * The player core (player/engine.ts) owns playback plumbing: decoding,
+ * memory, pause/resume, next/prev input, full-screen, wake lock. Formats come
+ * in two kinds:
+ *
+ *  - `transition` formats (e.g. Crossfade) only say *how* one photo becomes
+ *    the next. The engine owns the playlist, timing and preloading and calls
+ *    `transition()` for each step.
+ *  - `scene` formats (e.g. Sliding Panels, Floating) show several photos at
+ *    once and run their own loop. They get a `PhotoLibrary` that can decode
+ *    any photo at the size it will be drawn, and receive pause/next/prev from
+ *    the engine.
+ *
+ * Adding a format means implementing one of these and registering it in
+ * formats/index.ts; no core changes. Its `settingsSchema` is rendered
+ * automatically by the settings UI and persisted per collection, and `uses`
+ * says which global settings (interval, transition speed, …) apply to it.
  */
 import type { Backdrop, Fit } from '../db/db';
 
@@ -92,13 +102,86 @@ export interface FormatInstance {
   destroy(): void;
 }
 
-export interface SlideshowFormat<S extends FormatSettings = FormatSettings> {
+/** Which global playback settings a format uses (the settings UI hides the rest). */
+export interface GlobalSettingUse {
+  /** Label for the interval slider, or false if the format has no interval. */
+  interval: string | false;
+  transition: boolean;
+  shuffle: boolean;
+  fit: boolean;
+  backdrop: boolean;
+}
+
+interface FormatMeta {
   id: string;
   name: string;
   description: string;
   settingsSchema: SettingField[];
+  uses: GlobalSettingUse;
+}
+
+export interface TransitionFormat<S extends FormatSettings = FormatSettings> extends FormatMeta {
+  kind: 'transition';
   create(ctx: FormatContext, settings: S): FormatInstance;
 }
+
+/** A decoded photo handed to a scene. The scene must close() it when done. */
+export interface LoadedPhoto extends SlideImage {
+  id: string;
+  close(): void;
+}
+
+export interface PhotoLibrary {
+  /** Every photo in the collection, in collection order. */
+  readonly photos: readonly PhotoInfo[];
+  /**
+   * Decode a photo. Pass the box (device px) it will be drawn into and it is
+   * decoded no larger than needed to cover that box, which keeps memory low
+   * when many photos are on screen. Resolves null if the photo can't be read.
+   */
+  load(id: string, box?: { width: number; height: number }): Promise<LoadedPhoto | null>;
+}
+
+export interface SceneTiming {
+  /** Global "interval" setting, in ms. */
+  intervalMs: number;
+  /** Global "transition speed" setting, in ms. */
+  transitionMs: number;
+}
+
+export interface SceneStatus {
+  /** Monotonic step counter (e.g. layouts shown), surfaced for tests and screen readers. */
+  position: number;
+}
+
+export interface SceneContext extends FormatContext {
+  library: PhotoLibrary;
+  timing: SceneTiming;
+  random: () => number;
+  onStatus(status: SceneStatus): void;
+}
+
+export interface SceneInstance {
+  /** Load and show the first content, then keep running until destroyed. Resolves once something is on screen. */
+  start(): Promise<void>;
+  pause(): void;
+  resume(): void;
+  /** User asked for the next / previous content. Formats may ignore prev. */
+  next(): void;
+  prev(): void;
+  resize(viewport: Viewport): void;
+  setRenderOptions(render: RenderOptions): void;
+  setTiming(timing: SceneTiming): void;
+  /** Stop all animation and close every LoadedPhoto it holds. */
+  destroy(): void;
+}
+
+export interface SceneFormat<S extends FormatSettings = FormatSettings> extends FormatMeta {
+  kind: 'scene';
+  create(ctx: SceneContext, settings: S): SceneInstance;
+}
+
+export type SlideshowFormat<S extends FormatSettings = FormatSettings> = TransitionFormat<S> | SceneFormat<S>;
 
 export function defaultSettings(schema: SettingField[]): FormatSettings {
   return Object.fromEntries(schema.map((f) => [f.key, f.default]));
