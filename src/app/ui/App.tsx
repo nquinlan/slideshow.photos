@@ -59,6 +59,9 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const storage = useStorageInfo(dataVersion);
   const playerRef = useRef<PlayerHandle>(null);
+  // Imports need the current collection, which loads asynchronously from IndexedDB at
+  // startup. Until then the add controls are disabled so a selection is never dropped.
+  const canImport = ready && !!collection;
 
   // --- loading ---
 
@@ -205,8 +208,9 @@ export default function App() {
   }
 
   async function onDrop(e: React.DragEvent) {
-    e.preventDefault();
+    e.preventDefault(); // always, or the browser navigates to the dropped file
     setDragging(false);
+    if (!canImport) return;
     const files = await filesFromDataTransfer(e.dataTransfer);
     if (files.length) await startImport(filesToItems(files), 'dropped files');
   }
@@ -258,7 +262,7 @@ export default function App() {
     <div
       className={`app${dragging ? ' is-dragging' : ''}`}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
+        if (canImport && e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
           setDragging(true);
         }
@@ -359,10 +363,10 @@ export default function App() {
           </div>
 
           <div className="toolbar" role="toolbar" aria-label="Add and manage photos">
-            <button type="button" className="btn" onClick={() => void addFiles('files')}>
+            <button type="button" className="btn" onClick={() => void addFiles('files')} disabled={!canImport}>
               Add photos
             </button>
-            <button type="button" className="btn" onClick={() => void addFiles('folder')}>
+            <button type="button" className="btn" onClick={() => void addFiles('folder')} disabled={!canImport}>
               Add folder
             </button>
             {collection && (
