@@ -8,8 +8,17 @@
  * and the bitmap released. Every frame is then one drawImage per photo,
  * which holds 60 fps with a dozen photos on screen. Motion is time-based.
  */
-import { createSurface, ctx2d, rafScheduler, shuffledOrder, sizeCanvas, stageSize, type Scheduler, type Surface } from './shared';
-import type { FormatSettings, RenderOptions, SceneContext, SceneFormat, SceneInstance, SceneTiming, Viewport } from './types';
+import { createSurface, ctx2d, drawGraphic, rafScheduler, shuffledOrder, sizeCanvas, stageSize, type Scheduler, type Surface } from './shared';
+import type {
+  FormatSettings,
+  LoadedPhoto,
+  RenderOptions,
+  SceneContext,
+  SceneFormat,
+  SceneInstance,
+  SceneTiming,
+  Viewport,
+} from './types';
 
 export interface FloatingSettings extends FormatSettings {
   /** Seconds for a mid-depth photo to cross the screen. */
@@ -36,7 +45,18 @@ interface Sprite {
   h: number;
 }
 
+/** A full-screen graphic: the drift pauses while it fades in, holds, and fades out. */
+interface Feature {
+  kind: 'feature';
+  img: LoadedPhoto;
+  /** Seconds since it started. */
+  t: number;
+}
+
+const FADE = 0.4;
+
 interface Drifter {
+  kind?: 'drifter';
   id: string;
   sprite: Sprite;
   layer: number;
@@ -90,7 +110,9 @@ export function drifterSize(
 export class FloatingScene implements SceneInstance {
   private ctx: CanvasRenderingContext2D;
   private drifters: Drifter[] = [];
-  private ready: Promise<Drifter | null>[] = [];
+  private ready: Promise<Drifter | Feature | null>[] = [];
+  private feature?: Feature;
+  private timing: SceneTiming;
   private order: number[] = [];
   private orderPos = 0;
   /**
@@ -111,6 +133,7 @@ export class FloatingScene implements SceneInstance {
     private deps: FloatingDeps = { scheduler: rafScheduler, createSurface },
   ) {
     this.ctx = ctx2d(c.canvas);
+    this.timing = c.timing;
     const { width, height } = stageSize(c.viewport);
     sizeCanvas(c.canvas, width, height);
     const n = c.library.photos.length;
@@ -122,7 +145,7 @@ export class FloatingScene implements SceneInstance {
     if (!this.c.library.photos.length) throw new Error('This collection has no photos yet.');
     const { height: H } = this.c.canvas;
     // Start with the screen already populated, spread over the full travel range.
-    const made = await Promise.all(Array.from({ length: this.density }, () => this.makeDrifter()));
+    const made = await Promise.all(Array.from({ length: this.density }, () => this.makePhotoDrifter()));
     const ok = made.filter((d): d is Drifter => !!d);
     if (this.destroyed) return ok.forEach((d) => this.release(d));
     if (!ok.length) throw new Error('None of the photos in this collection could be decoded.');
@@ -152,7 +175,9 @@ export class FloatingScene implements SceneInstance {
   }
 
   next() {
-    void this.spawn();
+    // Skip a full-screen graphic that's showing; otherwise bring in another photo now.
+    if (this.feature) this.feature.t = Math.max(this.feature.t, FADE + this.holdSeconds);
+    else void this.spawn();
   }
 
   prev() {
@@ -172,8 +197,9 @@ export class FloatingScene implements SceneInstance {
     this.c.render = render;
   }
 
-  setTiming(_t: SceneTiming) {
-    // Floating uses its own speed/density settings.
+  setTiming(t: SceneTiming) {
+    // Drift speed/density are Floating's own settings; the interval sets how long full-screen graphics show.
+    this.timing = t;
   }
 
   destroy() {
@@ -181,8 +207,19 @@ export class FloatingScene implements SceneInstance {
     this.deps.scheduler.cancel(this.frameId);
     this.drifters.forEach((d) => this.release(d));
     this.drifters = [];
-    for (const p of this.ready) void p.then((d) => d && this.release(d));
+    for (const p of this.ready) void p.then((d) => d && this.discard(d));
     this.ready = [];
+    this.feature?.img.close();
+    this.feature = undefined;
+  }
+
+  private get holdSeconds() {
+    return Math.max(1, this.timing.intervalMs / 1000);
+  }
+
+  private discard(d: Drifter | Feature) {
+    if (d.kind === 'feature') d.img.close();
+    else this.release(d);
   }
 
   // --- internals ---
@@ -219,7 +256,32 @@ export class FloatingScene implements SceneInstance {
     return photos.length <= 3 ? this.order[this.orderPos++ % this.order.length] : -1;
   }
 
-  private async makeDrifter(): Promise<Drifter | null> {
+  /** One step of the flow: a graphic if one is due (by share), otherwise a photo. */
+  private async makeDrifter(): Promise<Drifter | Feature | null> {
+    const g = this.c.graphics.next();
+    if (!g) return this.makePhotoDrifter();
+    const img = await this.c.graphics.load(g.id);
+    if (!img || this.destroyed) {
+      img?.close();
+      return this.destroyed ? null : this.makePhotoDrifter();
+    }
+    if (g.fullScreen) return { kind: 'feature', img, t: 0 };
+    // A card in the graphic's colour, sized like a photo; the graphic sits whole inside it.
+    const layer = this.s.depth ? Math.floor(this.c.random() * LAYERS.length) : LAYERS.length - 1;
+    const { scale, dim } = LAYERS[layer];
+    const card = drifterSize({ width: g.width, height: g.height }, this.base, scale);
+    const sprite = this.renderGraphicSprite(img, card.w, card.h, this.s.depth ? dim : 0);
+    img.close();
+    return { id: `graphic:${g.id}`, sprite, layer, x: 0, y: 0, speed: this.speedFor(scale) };
+  }
+
+  private speedFor(scale: number) {
+    const { height: H } = this.c.canvas;
+    const midSpeed = (H + this.base) / Math.max(1, this.s.crossSeconds);
+    return midSpeed * (this.s.depth ? scale / LAYERS[1].scale : 1) * (this.s.direction === 'up' ? -1 : 1);
+  }
+
+  private async makePhotoDrifter(): Promise<Drifter | null> {
     const photos = this.c.library.photos;
     for (let attempt = 0; attempt < Math.min(5, photos.length); attempt++) {
       const index = this.nextPhotoIndex();
@@ -242,10 +304,7 @@ export class FloatingScene implements SceneInstance {
       const fitted = drifterSize(photo, this.base, scale);
       const sprite = this.renderSprite(photo.source, fitted.w, fitted.h, this.s.depth ? dim : 0);
       photo.close();
-      const { height: H } = this.c.canvas;
-      const midSpeed = (H + this.base) / Math.max(1, this.s.crossSeconds);
-      const speed = midSpeed * (this.s.depth ? scale / LAYERS[1].scale : 1) * (this.s.direction === 'up' ? -1 : 1);
-      return { id: info.id, sprite, layer, x: 0, y: 0, speed };
+      return { id: info.id, sprite, layer, x: 0, y: 0, speed: this.speedFor(scale) };
     }
     return null;
   }
@@ -274,6 +333,25 @@ export class FloatingScene implements SceneInstance {
     return { surface, w: sw, h: sh };
   }
 
+  private renderGraphicSprite(img: LoadedPhoto, w: number, h: number, dim: number): Sprite {
+    const pad = Math.round(Math.min(w, h) * 0.06); // room for the shadow
+    const surface = this.deps.createSurface(w + 2 * pad, h + 2 * pad);
+    const g = surface.getContext('2d') as CanvasRenderingContext2D;
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.65)';
+    g.shadowBlur = pad * 0.8;
+    g.shadowOffsetY = pad * 0.25;
+    g.fillStyle = img.graphic!.background;
+    g.fillRect(pad, pad, w, h);
+    g.restore();
+    drawGraphic(g, img, { x: pad, y: pad, w, h });
+    if (dim > 0) {
+      g.fillStyle = `rgba(0,0,0,${dim})`;
+      g.fillRect(pad, pad, w, h);
+    }
+    return { surface, w: w + 2 * pad, h: h + 2 * pad };
+  }
+
   private release(d: Drifter) {
     sizeCanvas(d.sprite.surface, 1, 1);
     this.reserved.delete(d.id);
@@ -289,6 +367,13 @@ export class FloatingScene implements SceneInstance {
     this.topUp();
     const d = p ? await p : null;
     if (!d || this.destroyed) return;
+    if (d.kind === 'feature') {
+      if (this.feature) d.img.close(); // one at a time
+      else this.feature = d;
+      this.spawned++;
+      this.c.onStatus({ position: this.spawned });
+      return;
+    }
     const { width: W, height: H } = this.c.canvas;
     const up = this.s.direction === 'up';
     d.y = up ? H : -d.sprite.h;
@@ -314,7 +399,14 @@ export class FloatingScene implements SceneInstance {
   tick(now: number) {
     const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
     this.last = now;
-    if (!this.paused && dt > 0) {
+    if (!this.paused && dt > 0 && this.feature) {
+      // Full-screen graphic: the drift holds still while it shows.
+      this.feature.t += dt;
+      if (this.feature.t >= 2 * FADE + this.holdSeconds) {
+        this.feature.img.close();
+        this.feature = undefined;
+      }
+    } else if (!this.paused && dt > 0) {
       for (const d of this.drifters) d.y += d.speed * dt;
       const { height: H } = this.c.canvas;
       const gone = this.drifters.filter((d) => d.y > H || d.y + d.sprite.h < 0);
@@ -339,6 +431,13 @@ export class FloatingScene implements SceneInstance {
     g.fillStyle = '#000';
     g.fillRect(0, 0, W, H);
     for (const d of this.drifters) g.drawImage(d.sprite.surface as CanvasImageSource, Math.round(d.x - d.sprite.w / 2), Math.round(d.y));
+    const f = this.feature;
+    if (f) {
+      const hold = this.holdSeconds;
+      g.globalAlpha = f.t < FADE ? f.t / FADE : f.t > FADE + hold ? Math.max(0, 1 - (f.t - FADE - hold) / FADE) : 1;
+      drawGraphic(g, f.img, { x: 0, y: 0, w: W, h: H });
+      g.globalAlpha = 1;
+    }
   }
 
   /** Test hooks. */
@@ -348,6 +447,9 @@ export class FloatingScene implements SceneInstance {
   get ids() {
     return this.drifters.map((d) => d.id);
   }
+  get showingFeature() {
+    return !!this.feature;
+  }
 }
 
 export const floating: SceneFormat<FloatingSettings> = {
@@ -355,7 +457,7 @@ export const floating: SceneFormat<FloatingSettings> = {
   id: 'floating',
   name: 'Floating',
   description: 'Photos drift across the screen at different depths, nearer ones larger and faster.',
-  uses: { interval: false, transition: false, shuffle: true, fit: false, backdrop: false },
+  uses: { interval: 'Full-screen graphics show for', transition: false, shuffle: true, fit: false, backdrop: false },
   settingsSchema: [
     {
       key: 'crossSeconds',

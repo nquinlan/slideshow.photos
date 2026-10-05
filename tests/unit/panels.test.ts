@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { generateLayout, isValidLayout, maxTilesFor, type Rect } from '../../src/app/formats/panels/layout';
 import { assignPhotos, matchCost } from '../../src/app/formats/panels/match';
 import { drawPanel, motionsFor } from '../../src/app/formats/panels/motion';
-import { SlidingPanelsScene, type SlidingPanelsSettings } from '../../src/app/formats/slidingPanels';
-import type { LoadedPhoto, PhotoInfo, SceneContext } from '../../src/app/formats/types';
+import { SlidingPanelsScene, bestTileForGraphic, type SlidingPanelsSettings } from '../../src/app/formats/slidingPanels';
+import type { GraphicInfo, GraphicsSource, LoadedPhoto, PhotoInfo, SceneContext } from '../../src/app/formats/types';
 
 /** Deterministic, well-mixed PRNG (mulberry32) for reproducible layouts. */
 function rng(seed: number) {
@@ -210,7 +210,7 @@ describe('Sliding Panels motion', () => {
 });
 
 describe('Sliding Panels scene cycle', () => {
-  function harness(photoCount = 12) {
+  function harness(photoCount = 12, graphicsSource?: GraphicsSource) {
     let now = 0;
     let rafQueue: [number, (t: number) => void][] = [];
     let timers: { id: number; at: number; cb: () => void }[] = [];
@@ -243,6 +243,7 @@ describe('Sliding Panels scene cycle', () => {
       render: { fit: 'contain', backdrop: 'black' },
       timing: { intervalMs: 5000, transitionMs: 900 },
       shuffle: false,
+      graphics: graphicsSource ?? { next: () => null, load: async () => null },
       random: rng(42),
       onStatus: (s) => positions.push(s.position),
       library: {
@@ -291,7 +292,8 @@ describe('Sliding Panels scene cycle', () => {
         await settle();
       }
     }
-    return { scene, advance, settle, positions, loaded, closed, pendingTimers: () => timers.length };
+    const plans = () => (scene as unknown as { history: { tiles: Rect[]; items: { kind: string; id: string }[] }[] }).history;
+    return { scene, advance, settle, positions, loaded, closed, plans, pendingTimers: () => timers.length };
   }
 
   it('holds for the interval, transitions in ~0.9 s, and loops with new layouts', async () => {
@@ -357,5 +359,48 @@ describe('Sliding Panels scene cycle', () => {
     await h.scene.start();
     await h.advance(600 + 5000 + 1000);
     expect(h.positions).toEqual([0, 1]);
+  });
+
+  const logo = (fullScreen: boolean): GraphicInfo => ({ id: 'logo', width: 400, height: 100, kind: 'vector', background: '#fff', scalePct: 80, fullScreen });
+  const always = (g: GraphicInfo, closed: string[]): GraphicsSource => ({
+    next: () => g,
+    load: async (id) => ({ id, source: {} as CanvasImageSource, width: 400, height: 100, maxScale: Infinity, graphic: g, close: () => closed.push(`g:${id}`) }) as LoadedPhoto,
+  });
+
+  it('a mixed-in graphic takes one panel (the one where it shows largest) among photos', async () => {
+    const gClosed: string[] = [];
+    const h = harness(12, always(logo(false), gClosed));
+    await h.scene.start();
+    await h.advance(600);
+    for (let i = 0; i < 4; i++) {
+      h.scene.next();
+      await h.advance(1000);
+    }
+    for (const plan of h.plans()) {
+      const g = plan.items.filter((it) => it.kind === 'graphic');
+      expect(g).toHaveLength(1);
+      expect(plan.tiles.length).toBeGreaterThan(1); // mixed in, not alone
+      const gi = plan.items.findIndex((it) => it.kind === 'graphic');
+      expect(gi).toBe(bestTileForGraphic(plan.tiles.map((t) => ({ x: t.x * 1920, y: t.y * 1080, w: t.w * 1920, h: t.h * 1080 })), { width: 400, height: 100 }));
+    }
+    h.scene.destroy();
+    await h.settle();
+    expect(gClosed.length).toBeGreaterThan(3);
+  });
+
+  it('a full-screen graphic gets the whole layout', async () => {
+    const h = harness(12, always(logo(true), []));
+    await h.scene.start();
+    await h.advance(600);
+    expect(h.plans()[0].items).toEqual([{ kind: 'graphic', id: 'logo' }]);
+  });
+
+  it('bestTileForGraphic picks the tile where the graphic is largest when contained', () => {
+    const tiles: Rect[] = [
+      { x: 0, y: 0, w: 600, h: 900 }, // tall: a wide logo would be small
+      { x: 0, y: 0, w: 1200, h: 400 }, // wide: best for a 4:1 logo
+      { x: 0, y: 0, w: 500, h: 500 },
+    ];
+    expect(bestTileForGraphic(tiles, { width: 400, height: 100 })).toBe(1);
   });
 });

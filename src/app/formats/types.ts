@@ -171,8 +171,20 @@ export interface SceneStatus {
   position: number;
 }
 
+/** Logos/sponsor graphics to mix into the show, spaced by their share. */
+export interface GraphicsSource {
+  /**
+   * Call once per step (a slide, a layout, a drifting item): returns the
+   * graphic due at this step, if any. At most one per step.
+   */
+  next(): GraphicInfo | null;
+  /** Decode a graphic; the result has `graphic` set and must be closed. */
+  load(id: string): Promise<LoadedPhoto | null>;
+}
+
 export interface SceneContext extends FormatContext {
   library: PhotoLibrary;
+  graphics: GraphicsSource;
   timing: SceneTiming;
   /** Global shuffle setting (for scenes whose `uses.shuffle` is true). */
   shuffle: boolean;

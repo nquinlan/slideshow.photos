@@ -211,4 +211,41 @@ describe('SlideshowEngine', () => {
     expect(log).toContain('init:a:2');
     expect(engine.state.total).toBe(3);
   });
+
+  it('transition formats show graphics at their share without skipping photos', async () => {
+    log.length = 0;
+    const timers: (() => void)[] = [];
+    const g = { id: 'logo', width: 4, height: 1, kind: 'vector' as const, background: '#000', scalePct: 80, fullScreen: false };
+    const closedGraphics: string[] = [];
+    const engine = new SlideshowEngine({
+      canvas: {} as HTMLCanvasElement,
+      photos: ['a', 'b', 'c', 'd'].map((id) => ({ id, width: 10, height: 10, maxScale: 1 })),
+      settings: { ...DEFAULT_PLAYBACK, formatId: 'test-recorder', transitionMs: 500 },
+      reducedMotion: false,
+      viewport: { width: 100, height: 100, devicePixelRatio: 1 },
+      loadBlob: async (id) => new Blob([id]),
+      decode: async (b) => {
+        const id = await b.text();
+        return { source: { id } as unknown as CanvasImageSource, width: 10, height: 10, close: () => undefined };
+      },
+      graphics: [{ info: g, share: 0.5 }],
+      loadGraphic: async () => new Blob(['svg']),
+      decodeGraphic: async (info) => ({ id: info.id, source: { id: 'LOGO' } as unknown as CanvasImageSource, width: 4, height: 1, graphic: info, close: () => closedGraphics.push(info.id) }),
+      onState: () => undefined,
+      setTimer: (cb) => timers.push(cb),
+      clearTimer: () => (timers.length = 0),
+      random: () => 0.5,
+    });
+    await engine.start();
+    for (let i = 0; i < 8; i++) {
+      timers.shift()?.();
+      for (let k = 0; k < 6; k++) await flush();
+    }
+    const shown = log.filter((l) => l.startsWith('to:')).map((l) => l.split(':')[1]);
+    // Every other step is the logo, and photos still advance in order around it.
+    expect(shown.filter((x) => x === 'LOGO').length).toBe(4);
+    expect(shown.filter((x) => x !== 'LOGO')).toEqual(['b', 'c', 'd', 'a']);
+    expect(closedGraphics.length).toBeGreaterThanOrEqual(3); // released when the next slide replaces them
+    engine.destroy();
+  });
 });

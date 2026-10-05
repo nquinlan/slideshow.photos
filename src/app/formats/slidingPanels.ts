@@ -41,10 +41,30 @@ const PHASES = { out: 0.42, beat: 0.11, in: 0.47 };
 const easeIn = (t: number) => t * t;
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
+/** What fills a tile: a photo, or a logo/sponsor graphic (shown whole on its colour). */
+interface PlanItem {
+  kind: 'photo' | 'graphic';
+  id: string;
+}
+
 /** A planned layout: tiles normalised to 0..1 so it survives resizes. */
 interface Plan {
   tiles: Rect[];
-  ids: string[];
+  items: PlanItem[];
+}
+
+/** The tile where a graphic shows largest when contained (graphics are never cropped). */
+export function bestTileForGraphic(tiles: Rect[], g: { width: number; height: number }): number {
+  let best = 0;
+  let bestScale = -1;
+  tiles.forEach((t, i) => {
+    const scale = Math.min(t.w / g.width, t.h / g.height);
+    if (scale > bestScale) {
+      best = i;
+      bestScale = scale;
+    }
+  });
+  return best;
 }
 
 interface Frame {
@@ -220,20 +240,32 @@ export class SlidingPanelsScene implements SceneInstance {
     const photos = this.c.library.photos;
     const v = this.c.viewport;
     const gutter = Math.round((this.s.gutterPct / 100) * W);
+    const margin = Math.max(1, Math.round(W * 0.0007));
+    const norm = (t: Rect) => ({ x: t.x / W, y: t.y / H, w: t.w / W, h: t.h / H });
+    // One step per layout: a graphic's share is the % of layouts that include it.
+    const graphic = this.c.graphics.next();
+    if (graphic?.fullScreen || (graphic && !photos.length)) {
+      return { tiles: [norm({ x: margin, y: margin, w: W - 2 * margin, h: H - 2 * margin })], items: [{ kind: 'graphic', id: graphic.id }] };
+    }
     const tiles = generateLayout({
       width: W,
       height: H,
-      maxTiles: Math.min(maxTilesFor(Math.min(v.width, v.height), this.s.maxTiles), photos.length),
+      maxTiles: Math.min(maxTilesFor(Math.min(v.width, v.height), this.s.maxTiles), photos.length + (graphic ? 1 : 0)),
       gutter,
-      margin: Math.max(1, Math.round(W * 0.0007)),
-      fullBleedChance: FULL_BLEED_CHANCE[this.s.fullScreen] ?? 0.15,
+      margin,
+      // A mixed-in graphic sits among photos, so don't pick a single full-bleed layout for it.
+      fullBleedChance: graphic ? 0 : (FULL_BLEED_CHANCE[this.s.fullScreen] ?? 0.15),
       random: this.c.random,
     });
+    const graphicTile = graphic ? bestTileForGraphic(tiles, graphic) : -1;
+    const photoTiles = tiles.filter((_, i) => i !== graphicTile);
     // Avoid photos from the current and previous layout when the library allows.
     const avoid = new Set<string>();
-    for (const p of this.history.slice(-2)) for (const id of p.ids) avoid.add(id);
-    const ids = assignPhotos(tiles, photos, { random: this.c.random, avoid });
-    return { tiles: tiles.map((t) => ({ x: t.x / W, y: t.y / H, w: t.w / W, h: t.h / H })), ids };
+    for (const p of this.history.slice(-2)) for (const it of p.items) if (it.kind === 'photo') avoid.add(it.id);
+    const ids = photoTiles.length ? assignPhotos(photoTiles, photos, { random: this.c.random, avoid }) : [];
+    let next = 0;
+    const items: PlanItem[] = tiles.map((_, i) => (i === graphicTile ? { kind: 'graphic', id: graphic!.id } : { kind: 'photo', id: ids[next++] }));
+    return { tiles: tiles.map(norm), items };
   }
 
   private pixelTiles(plan: Plan): Rect[] {
@@ -244,7 +276,11 @@ export class SlidingPanelsScene implements SceneInstance {
   private async loadFrame(plan: Plan): Promise<Frame | null> {
     const tiles = this.pixelTiles(plan);
     const photos = await Promise.all(
-      plan.ids.map((id, i) => this.c.library.load(id, { width: Math.ceil(tiles[i].w), height: Math.ceil(tiles[i].h) })),
+      plan.items.map((it, i) =>
+        it.kind === 'graphic'
+          ? this.c.graphics.load(it.id)
+          : this.c.library.load(it.id, { width: Math.ceil(tiles[i].w), height: Math.ceil(tiles[i].h) }),
+      ),
     );
     if (this.destroyed) {
       photos.forEach((p) => p?.close());

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FloatingScene, LAYERS, chooseX, drifterSize, type FloatingSettings } from '../../src/app/formats/floating';
 import type { Surface } from '../../src/app/formats/shared';
-import type { LoadedPhoto, PhotoInfo, SceneContext } from '../../src/app/formats/types';
+import type { GraphicInfo, GraphicsSource, LoadedPhoto, PhotoInfo, SceneContext } from '../../src/app/formats/types';
 
 function rng(seed: number) {
   return () => {
@@ -36,7 +36,7 @@ describe('Floating helpers', () => {
 });
 
 describe('Floating scene', () => {
-  function harness(over: Partial<FloatingSettings> = {}, photoCount = 30) {
+  function harness(over: Partial<FloatingSettings> = {}, photoCount = 30, graphicsSource?: GraphicsSource) {
     let rafQueue: [number, (t: number) => void][] = [];
     let ids = 0;
     let now = 0;
@@ -56,6 +56,7 @@ describe('Floating scene', () => {
       render: { fit: 'contain', backdrop: 'black' },
       timing: { intervalMs: 5000, transitionMs: 900 },
       shuffle: false,
+      graphics: graphicsSource ?? { next: () => null, load: async () => null },
       random: rng(7),
       onStatus: (s) => statuses.push(s.position),
       library: {
@@ -182,5 +183,40 @@ describe('Floating scene', () => {
     const h = harness({ density: 20 }, 8);
     await h.scene.start();
     expect(h.scene.count).toBe(5); // 8 photos − 3 kept free for entering
+  });
+
+  const logo = (fullScreen: boolean): GraphicInfo => ({ id: 'logo', width: 400, height: 100, kind: 'vector', background: '#123456', scalePct: 80, fullScreen });
+  const every = (n: number, g: GraphicInfo, closed: string[]): GraphicsSource => {
+    let step = 0;
+    return {
+      next: () => (++step % n === 0 ? g : null),
+      load: async (id) => ({ id, source: {} as CanvasImageSource, width: 400, height: 100, maxScale: Infinity, graphic: g, close: () => closed.push(id) }) as LoadedPhoto,
+    };
+  };
+
+  it('mixes graphic cards into the drift at their share', async () => {
+    const closed: string[] = [];
+    const h = harness({}, 30, every(4, logo(false), closed));
+    await h.scene.start();
+    let seen = 0;
+    for (let i = 0; i < 60; i++) {
+      await h.advance(1000, 100);
+      if (h.scene.ids.some((id) => id === 'graphic:logo')) seen++;
+    }
+    expect(seen).toBeGreaterThan(10);
+    expect(closed.length).toBeGreaterThan(2); // decoded graphics are released once rendered into sprites
+  });
+
+  it('a full-screen graphic pauses the drift, holds for the interval, then the drift resumes', async () => {
+    const closed: string[] = [];
+    const h = harness({}, 30, every(1, logo(true), closed));
+    await h.scene.start();
+    await h.advance(4000, 100); // first spawn is a full-screen graphic
+    expect(h.scene.showingFeature).toBe(true);
+    const frozen = h.scene.ids.join();
+    await h.advance(2000, 100);
+    expect(h.scene.ids.join()).toBe(frozen); // nothing moved on or off
+    await h.advance(5000, 100); // fade in + 5 s hold + fade out
+    expect(closed).toContain('logo');
   });
 });

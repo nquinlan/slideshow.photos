@@ -18,12 +18,16 @@ import { shuffledOrder } from '../formats/shared';
 import {
   resolveSettings,
   type FormatInstance,
+  type GraphicInfo,
+  type GraphicsSource,
   type LoadedPhoto,
   type PhotoInfo,
   type PhotoLibrary,
   type SceneInstance,
   type Viewport,
 } from '../formats/types';
+import { GraphicScheduler } from '../graphics/graphics';
+import { decodeGraphic } from './graphicLoader';
 import { createLibrary, type Decoder } from './library';
 
 export interface EngineState {
@@ -48,8 +52,12 @@ export interface EngineOptions {
   /** Photo to start on (by id); defaults to the first in playlist order. */
   startPhotoId?: string;
   lookahead?: number;
+  /** Enabled graphics (logos, sponsors) with their share of steps, 0..1. */
+  graphics?: { info: GraphicInfo; share: number }[];
+  loadGraphic?(id: string): Promise<Blob | undefined>;
   /** Injectable for tests. */
   decode?: Decoder;
+  decodeGraphic?: (info: GraphicInfo, blob: Blob) => Promise<LoadedPhoto>;
   random?: () => number;
   setTimer?: (cb: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
@@ -71,6 +79,13 @@ export class SlideshowEngine {
   private scenePosition = 0;
   private formatKey = '';
   private readonly library: PhotoLibrary;
+  private graphicItems: { info: GraphicInfo; share: number }[] = [];
+  private scheduler = new GraphicScheduler([]);
+  /** Shared with scenes; swapping the scheduler doesn't require restarting them. */
+  private readonly graphics: GraphicsSource = {
+    next: () => this.scheduler.next(),
+    load: (id) => this.loadGraphic(id),
+  };
   private cache = new Map<number, Promise<LoadedPhoto | null>>();
   /** Decoded bitmaps currently held by the cache, by playlist position. */
   private resolved = new Map<number, LoadedPhoto>();
@@ -88,6 +103,7 @@ export class SlideshowEngine {
     this.setTimer = o.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
     this.clearTimer = o.clearTimer ?? ((h) => clearTimeout(h as number));
     this.library = createLibrary(o.photos, o.loadBlob, o.decode);
+    this.setGraphics(o.graphics ?? []);
     this.buildOrder();
     this.createFormat();
   }
@@ -208,6 +224,12 @@ export class SlideshowEngine {
     }
   }
 
+  /** Update the enabled graphics or their shares (live; spacing restarts). */
+  setGraphics(items: { info: GraphicInfo; share: number }[]) {
+    this.graphicItems = items;
+    this.scheduler = new GraphicScheduler(items, this.o.random);
+  }
+
   destroy() {
     this.destroyed = true;
     this.cancelTimer();
@@ -271,6 +293,7 @@ export class SlideshowEngine {
         {
           ...ctx,
           library: this.library,
+          graphics: this.graphics,
           timing: this.timing(),
           shuffle: this.o.settings.shuffle,
           random: this.o.random ?? Math.random,
@@ -300,6 +323,23 @@ export class SlideshowEngine {
     this.scene = undefined;
     this.format?.destroy();
     this.format = undefined;
+  }
+
+  private async loadGraphic(id: string): Promise<LoadedPhoto | null> {
+    const info = this.graphicItems.find((g) => g.info.id === id)?.info;
+    if (!info || !this.o.loadGraphic) return null;
+    try {
+      const blob = await this.o.loadGraphic(id);
+      if (!blob) return null;
+      const g = await (this.o.decodeGraphic ?? decodeGraphic)(info, blob);
+      if (this.destroyed) {
+        g.close();
+        return null;
+      }
+      return g;
+    } catch {
+      return null;
+    }
   }
 
   private get(position: number): Promise<LoadedPhoto | null> {
@@ -369,6 +409,24 @@ export class SlideshowEngine {
     while (this.pendingStep !== 0 && !this.destroyed && this.format) {
       const step = this.pendingStep;
       this.pendingStep = 0;
+      // A single step forward may be a graphic's turn: show it without advancing the photo.
+      if (step === 1 && this.scheduler.size) {
+        const due = this.scheduler.next();
+        const graphic = due ? await this.graphics.load(due.id) : null;
+        if (this.destroyed || !this.format) {
+          graphic?.close();
+          break;
+        }
+        if (graphic) {
+          const previous = this.current;
+          const prevCached = !!previous && [...this.resolved.values()].includes(previous);
+          this.abort = new AbortController();
+          await this.format.transition(graphic, this.pendingStep !== 0 ? 0 : this.o.settings.transitionMs, this.abort.signal);
+          this.current = graphic;
+          if (previous && !prevCached) previous.close();
+          continue;
+        }
+      }
       const target = mod(this.pos + step, n);
       const img = await this.get(target);
       if (this.destroyed || !this.format) break;

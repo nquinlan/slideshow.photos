@@ -11,7 +11,7 @@
  * Content slides *with* the moving edge (it isn't squashed), and each panel is
  * clipped to its own frame, so panels never overlap.
  */
-import { fitRect } from '../shared';
+import { drawGraphic, fitRect } from '../shared';
 import type { SlideImage } from '../types';
 import type { Rect } from './layout';
 
@@ -50,9 +50,10 @@ export function drawPanel(
   seam = 0,
 ) {
   if (!img || visible <= 0) return;
-  // Always cover the tile, centre-cropped: panels never show gaps. Matching
+  // Photos always cover the tile, centre-cropped: panels never show gaps. Matching
   // (match.ts) ensures photos are big enough whenever the library allows, so
-  // enlarging past the original only happens as a last resort.
+  // enlarging past the original only happens as a last resort. Graphics are
+  // shown whole on their background colour instead (never cropped).
   const d = fitRect(img.width, img.height, rect.w, rect.h, 'cover');
   const dx = rect.x + d.x;
   const dy = rect.y + d.y;
@@ -63,7 +64,8 @@ export function drawPanel(
     ctx.beginPath();
     ctx.rect(clip.x, clip.y, clip.w, clip.h);
     ctx.clip();
-    ctx.drawImage(img.source, dx + ox, dy + oy, d.w, d.h);
+    if (img.graphic) drawGraphic(ctx, img, rect, ox, oy);
+    else ctx.drawImage(img.source, dx + ox, dy + oy, d.w, d.h);
     ctx.restore();
   };
 

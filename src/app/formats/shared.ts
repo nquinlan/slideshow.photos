@@ -54,6 +54,28 @@ export function fitRect(iw: number, ih: number, w: number, h: number, mode: 'con
   return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh };
 }
 
+/**
+ * Draw a graphic whole inside `rect` on its background colour: contained at
+ * its size-within-space, centred, never cropped; PNGs never enlarged past
+ * native size (via maxScale). `ox`/`oy` shift the whole panel (sliding).
+ */
+export function drawGraphic(
+  ctx: CanvasRenderingContext2D,
+  img: SlideImage,
+  rect: { x: number; y: number; w: number; h: number },
+  ox = 0,
+  oy = 0,
+) {
+  const g = img.graphic!;
+  ctx.fillStyle = g.background;
+  ctx.fillRect(rect.x + ox, rect.y + oy, rect.w, rect.h);
+  const k = Math.max(0.05, Math.min(1, g.scalePct / 100));
+  const r = fitRect(img.width, img.height, rect.w * k, rect.h * k, 'contain', img.maxScale);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img.source, rect.x + (rect.w - r.w) / 2 + ox, rect.y + (rect.h - r.h) / 2 + oy, r.w, r.h);
+}
+
 let tinyCanvas: Surface | undefined;
 
 /**
@@ -68,6 +90,7 @@ export function composeSlide(target: Surface, img: SlideImage, render: RenderOpt
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
+  if (img.graphic) return drawGraphic(ctx, img, { x: 0, y: 0, w: W, h: H });
   const r = fitRect(img.width, img.height, W, H, render.fit, img.maxScale);
   const fillsStage = r.x <= 0.5 && r.y <= 0.5 && r.x + r.w >= W - 0.5 && r.y + r.h >= H - 0.5;
   if (render.backdrop === 'blur' && !fillsStage) drawBlurBackdrop(ctx, img, W, H);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS, effectiveFormat, getFormat } from '../../src/app/formats';
 import { slidingPanels } from '../../src/app/formats/slidingPanels';
-import { animate, fitRect, stageSize, type Scheduler } from '../../src/app/formats/shared';
+import { animate, drawGraphic, fitRect, stageSize, type Scheduler } from '../../src/app/formats/shared';
 import { resolveSettings } from '../../src/app/formats/types';
 import { toPhotoInfo } from '../../src/app/player/photos';
 
@@ -57,6 +57,26 @@ describe('shared helpers', () => {
     // A capped 2560px copy of a 4032px original may fill a 2880px stage (scale 1.125 <= 1.575).
     const r = fitRect(2560, 1920, 2880, 1800, 'contain', 4032 / 2560);
     expect(r.h).toBe(1800);
+  });
+
+  it('drawGraphic shows a graphic whole on its colour; PNGs are never enlarged, SVGs scale', () => {
+    const calls: { fill?: unknown[]; draw?: number[]; color?: string }[] = [];
+    const ctx = {
+      set fillStyle(c: string) {
+        calls.push({ color: c });
+      },
+      fillRect: (...a: number[]) => calls.push({ fill: a }),
+      drawImage: (_s: unknown, ...a: number[]) => calls.push({ draw: a }),
+    } as unknown as CanvasRenderingContext2D;
+    const graphic = { id: 'g', width: 400, height: 100, kind: 'raster' as const, background: '#ff0', scalePct: 50, fullScreen: false };
+    const rect = { x: 0, y: 0, w: 1000, h: 1000 };
+    // PNG 400x100, 50% of a 1000px space = 500px box: contained at native 400x100 (not enlarged).
+    drawGraphic(ctx, { source: {} as CanvasImageSource, width: 400, height: 100, maxScale: 1, graphic }, rect);
+    expect(calls).toEqual([{ color: '#ff0' }, { fill: [0, 0, 1000, 1000] }, { draw: [300, 450, 400, 100] }]);
+    calls.length = 0;
+    // SVG: scales up to fill the 500px box, still whole (contain).
+    drawGraphic(ctx, { source: {} as CanvasImageSource, width: 400, height: 100, maxScale: Infinity, graphic: { ...graphic, kind: 'vector' } }, rect);
+    expect(calls[2]).toEqual({ draw: [250, 437.5, 500, 125] });
   });
 
   it('toPhotoInfo allows scaling up to the original, never below 1', () => {
