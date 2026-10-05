@@ -134,6 +134,7 @@ All processing is local. There are no analytics. Google code is loaded only afte
 - **E2E (Playwright):** 12/12 passing (2026-10-05). Covered:
   - In Chromium, Firefox and WebKit: import, dedupe, EXIF orientation, metadata stripping (GPS, camera and date verified by parsing the stored bytes), and playback.
   - In Chromium only: full-screen/Escape and offline.
+- **Google Photos import:** verified end to end by hand on 2026-10-05 (sign-in → pick → import into the library), plus the browser-only download spike (`spike/README.md`).
 - **Offline in Firefox and Safari: check by hand.** Playwright supports service workers only in Chromium. Its offline mode either bypasses the worker (Firefox) or aborts the page load (WebKit, [microsoft/playwright#42775](https://github.com/microsoft/playwright/issues/42775)). To check: load `/app` once, wait for "Ready to work offline", go offline, reload.
 - **Benchmark:** sizes and speed measured in Chromium (`bench/RESULTS.md`). Memory is still to be measured.
 - **Not yet run:** Lighthouse, and the memory benchmark (`npm run bench -- --only=0`).
