@@ -13,7 +13,7 @@ import {
   type PickedMediaItem,
   type PickingSession,
 } from '../google/picker';
-import type { ImportItem, ImportProgress } from '../import/importer';
+import { AuthExpiredError, type ImportItem, type ImportProgress } from '../import/importer';
 import { importService, type Batch, type ImportServiceState } from '../import/service';
 
 interface Props {
@@ -93,7 +93,12 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
       key: m.id,
       name: m.mediaFile.filename || 'Google Photos item',
       googleId: m.id,
-      load: (signal, cap) => fetchPickedPhoto(m.mediaFile.baseUrl, cap, tokenRef.current!, signal),
+      load: (signal, cap) => {
+        // Signed out (Disconnect) or expired mid-import: pause so it can resume after a fresh sign-in.
+        const t = tokenRef.current;
+        if (!t) return Promise.reject(new AuthExpiredError('Signed out of Google'));
+        return fetchPickedPhoto(m.mediaFile.baseUrl, cap, t, signal);
+      },
     }));
   }
 
