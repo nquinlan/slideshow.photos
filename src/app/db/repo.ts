@@ -15,9 +15,11 @@ import {
   type StoredBytes,
   type AppSettings,
   type Collection,
+  type Graphic,
   type PlaybackSettings,
   type Photo,
 } from './db';
+import { inspectGraphicFile } from '../graphics/graphics';
 
 export interface CollectionSummary extends Collection {
   count: number;
@@ -295,4 +297,65 @@ export async function saveAppSettings(patch: Partial<AppSettings>): Promise<AppS
   const next = { ...(await getAppSettings()), ...patch };
   await getDB().kv.put({ key: 'settings', value: next });
   return next;
+}
+
+// --- graphics (logos, sponsors) ---
+
+export async function listGraphics(): Promise<Graphic[]> {
+  return getDB().graphics.orderBy('addedAt').toArray();
+}
+
+/**
+ * Store an uploaded PNG/SVG exactly as uploaded (no resizing or re-encoding).
+ * Throws GraphicFileError for unsupported or unreadable files.
+ */
+export async function addGraphic(file: File): Promise<Graphic> {
+  const { type, width, height } = await inspectGraphicFile(file);
+  const graphic: Graphic = {
+    id: uid(),
+    name: file.name.replace(/\.(png|svg)$/i, '') || 'Graphic',
+    type,
+    width,
+    height,
+    bytes: file.size,
+    background: '#000000',
+    scalePct: 80,
+    fullScreen: false,
+    addedAt: Date.now(),
+  };
+  const blob = new Blob([file], { type: type === 'svg' ? 'image/svg+xml' : 'image/png' });
+  const write = async (mode: 'blob' | 'buffer') => {
+    const stored = await toStored(blob, mode);
+    const db = getDB();
+    await db.transaction('rw', db.graphics, db.graphicFiles, async () => {
+      await db.graphics.add(graphic);
+      await db.graphicFiles.add({ graphicId: graphic.id, ...stored });
+    });
+  };
+  const mode = await blobStorageMode();
+  try {
+    await write(mode);
+  } catch (e) {
+    if (mode !== 'blob' || !isBlobStorageError(e)) throw e;
+    setBlobMode('buffer');
+    await write('buffer');
+  }
+  return graphic;
+}
+
+export async function updateGraphic(id: string, patch: Partial<Pick<Graphic, 'name' | 'background' | 'scalePct' | 'fullScreen'>>) {
+  await getDB().graphics.update(id, patch);
+}
+
+export async function deleteGraphic(id: string) {
+  const db = getDB();
+  await db.transaction('rw', db.graphics, db.graphicFiles, async () => {
+    await db.graphics.delete(id);
+    await db.graphicFiles.delete(id);
+  });
+}
+
+/** The uploaded file, byte-for-byte. */
+export async function getGraphicFile(id: string): Promise<Blob | undefined> {
+  return fromStored(await getDB().graphicFiles.get(id));
 }

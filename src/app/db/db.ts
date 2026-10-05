@@ -127,6 +127,54 @@ export interface PlaybackSettings {
   backdrop: Backdrop;
   /** Per-format settings, keyed by format id. */
   formatSettings: Record<string, Record<string, unknown>>;
+  /** Graphics shown in this collection's slideshow (absent on older collections). */
+  graphics?: CollectionGraphics;
+}
+
+export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface CornerLogo {
+  graphicId: string;
+  position: Corner;
+  /** Width as % of the screen width. */
+  sizePct: number;
+  /** 0.2–1. */
+  opacity: number;
+  /** Draw a rounded plate in the graphic's background colour behind it. */
+  plate: boolean;
+}
+
+export interface CollectionGraphics {
+  /** Graphic id → share of slides/layouts/items, in percent (0 = off). */
+  share: Record<string, number>;
+  corner: CornerLogo | null;
+}
+
+export const DEFAULT_GRAPHICS: CollectionGraphics = { share: {}, corner: null };
+
+/**
+ * A logo or sponsor graphic. The uploaded file is stored byte-for-byte in
+ * `graphicFiles` (never resized or re-encoded).
+ */
+export interface Graphic {
+  id: string;
+  name: string;
+  type: 'png' | 'svg';
+  /** Intrinsic size (SVG: from width/height or viewBox). */
+  width: number;
+  height: number;
+  bytes: number;
+  /** CSS colour filling the graphic's space (it's always shown whole, never cropped). */
+  background: string;
+  /** Size of the graphic within its space, % (keeps logos off the edges). */
+  scalePct: number;
+  /** Take the whole screen when it comes up, instead of mixing in with photos. */
+  fullScreen: boolean;
+  addedAt: number;
+}
+
+export interface GraphicFileRow extends StoredBytes {
+  graphicId: string;
 }
 
 export const DEFAULT_PLAYBACK: PlaybackSettings = {
@@ -181,6 +229,8 @@ export class SlideshowDB extends Dexie {
   items!: EntityTable<CollectionItem, 'id'>;
   jobs!: EntityTable<ImportJob, 'id'>;
   kv!: Table<KV, string>;
+  graphics!: EntityTable<Graphic, 'id'>;
+  graphicFiles!: Table<GraphicFileRow, string>;
 
   constructor(name = 'tessera') {
     super(name);
@@ -193,6 +243,11 @@ export class SlideshowDB extends Dexie {
       items: '++id, [collectionId+position], &[collectionId+photoId], photoId',
       jobs: 'id, status, collectionId',
       kv: 'key',
+    });
+    // v2: logo/sponsor graphics, stored byte-for-byte.
+    this.version(2).stores({
+      graphics: 'id, addedAt',
+      graphicFiles: 'graphicId',
     });
   }
 }

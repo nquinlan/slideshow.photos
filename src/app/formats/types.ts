@@ -67,6 +67,23 @@ export interface SlideImage {
    * upscale beyond it. Undefined = no limit (e.g. synthetic images in tests).
    */
   maxScale?: number;
+  /** Set when this image is a graphic: draw it whole on its background colour. */
+  graphic?: GraphicInfo;
+}
+
+/** A logo/sponsor graphic as the player sees it. Always shown whole (contain), never cropped. */
+export interface GraphicInfo {
+  id: string;
+  width: number;
+  height: number;
+  /** SVGs scale freely; PNGs are never enlarged past their native size. */
+  kind: 'vector' | 'raster';
+  /** CSS colour filling the graphic's space. */
+  background: string;
+  /** Size within its space, %. */
+  scalePct: number;
+  /** Take the whole screen when shown, rather than mixing in with photos. */
+  fullScreen: boolean;
 }
 
 /** What the player knows about each photo before decoding it. */
