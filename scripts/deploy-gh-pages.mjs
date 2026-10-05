@@ -57,7 +57,8 @@ if (!site.hostname.endsWith('.github.io')) {
 
 const worktree = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-pages-'));
 try {
-  tryGit(['fetch', remote, branch], { stdio: 'inherit' });
+  // Fails quietly on the first deploy, when the remote branch doesn't exist yet.
+  tryGit(['fetch', remote, branch]);
   if (tryGit(['rev-parse', '--verify', `refs/remotes/${remote}/${branch}`])) {
     git(['worktree', 'add', '-B', branch, worktree, `${remote}/${branch}`]);
   } else if (tryGit(['rev-parse', '--verify', `refs/heads/${branch}`])) {
