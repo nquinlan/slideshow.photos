@@ -2,6 +2,19 @@ import { expect, test } from '@playwright/test';
 import exifr from 'exifr';
 import { ALL, addPhotos, expectPhotoCount, openApp } from './helpers';
 
+/** FourCCs of a WebP file's RIFF chunks (EXIF and 'XMP ' hold metadata). */
+function webpChunks(b: Buffer): string[] {
+  expect(b.toString('ascii', 0, 4)).toBe('RIFF');
+  expect(b.toString('ascii', 8, 12)).toBe('WEBP');
+  const ids: string[] = [];
+  for (let o = 12; o + 8 <= b.length; ) {
+    const size = b.readUInt32LE(o + 4);
+    ids.push(b.toString('ascii', o, o + 4));
+    o += 8 + size + (size & 1);
+  }
+  return ids;
+}
+
 test('imports local photos, dedupes, applies EXIF orientation, survives reload, and removes', async ({ page }) => {
   await openApp(page);
   await expectPhotoCount(page, 0);
@@ -51,7 +64,15 @@ test('imports local photos, dedupes, applies EXIF orientation, survives reload, 
   const leftovers: Record<string, unknown>[] = [];
   for (const s of stored) {
     expect(['image/webp', 'image/jpeg']).toContain(s.type);
-    const tags = (await exifr.parse(Buffer.from(s.base64, 'base64'), { gps: true, xmp: true, iptc: true })) ?? {};
+    const bytes = Buffer.from(s.base64, 'base64');
+    if (s.type === 'image/webp') {
+      // exifr can't read WebP; metadata there lives in RIFF chunks, so assert there are none.
+      const chunks = webpChunks(bytes);
+      expect(chunks).not.toContain('EXIF');
+      expect(chunks).not.toContain('XMP ');
+      continue;
+    }
+    const tags = (await exifr.parse(bytes, { gps: true, xmp: true, iptc: true })) ?? {};
     expect(tags.latitude).toBeUndefined();
     expect(tags.GPSLatitude).toBeUndefined();
     expect(tags.Make).toBeUndefined();
