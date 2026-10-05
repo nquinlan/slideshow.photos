@@ -5,10 +5,11 @@
  * first entry.
  */
 import { crossfade } from './crossfade';
+import { floating } from './floating';
 import { slidingPanels } from './slidingPanels';
 import type { SlideshowFormat } from './types';
 
-export const FORMATS: SlideshowFormat<any>[] = [slidingPanels, crossfade];
+export const FORMATS: SlideshowFormat<any>[] = [slidingPanels, floating, crossfade];
 
 export const REDUCED_MOTION_FORMAT_ID = 'crossfade';
 
