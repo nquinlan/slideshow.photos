@@ -107,6 +107,23 @@ scripts/build-sw.mjs       Workbox generateSW over dist/
 - **Controls.** Space pauses. ←/→ and PageUp/PageDown navigate. F toggles full-screen. Swipe navigates on touch screens. The cursor and controls hide after 2.5 s idle. Screen Wake Lock is held while playing.
 - **Reduced motion.** `prefers-reduced-motion` switches playback to Crossfade.
 
+### Logos and sponsor graphics
+
+Under **Logos & graphics** in the sidebar you can upload PNG or SVG files (up to 25 MB each).
+
+- **Stored byte-for-byte.** Graphics are never resized, re-encoded or stripped. An SVG missing `width`/`height` is drawn from an in-memory copy with those attributes added, because Firefox can't draw it to a canvas otherwise. The stored file is never changed.
+- **Shown whole.** A graphic is always contained, never cropped. It sits on its **background colour** at its **size within its space** (default 80%). SVGs scale freely; PNGs are never enlarged past their native size. An SVG loaded as an image can't run scripts.
+- **Share per collection.** Each collection sets how often each graphic appears: 0–50%, with all graphics together capped at 90%.
+  - **Crossfade:** % of slides.
+  - **Sliding Panels:** % of layouts.
+  - **Floating:** % of drifting items.
+
+  Appearances are spaced evenly rather than at random: 10% means about every 10th step.
+- **Mixed in or full screen** (per graphic):
+  - **Mixed in:** in Sliding Panels the graphic takes the panel where it shows largest; in Floating it drifts by as a card in its colour.
+  - **Full screen** (e.g. a ready-made sponsor slide): it takes the whole screen. In Floating the drift pauses while it fades in, holds for the interval, and fades out.
+- **Corner logo** (per collection): one graphic stays on screen over every format. You choose the corner, size, opacity and an optional plate in its colour.
+
 ### Adding a slideshow format
 
 Implement `SlideshowFormat` in `src/app/formats/types.ts` as one of two kinds:
