@@ -24,6 +24,7 @@ const CONFIGS = [
   { cap: 1920, quality: 0.80, format: 'webp' },
   { cap: 1920, quality: 0.85, format: 'webp' },
   { cap: 2560, quality: 0.80, format: 'webp' },
+  { cap: 2560, quality: 0.82, format: 'webp' }, // default Screen-fit on Retina/1440p screens
   { cap: 2560, quality: 0.85, format: 'webp' },
   { cap: 3840, quality: 0.82, format: 'webp' },
   { cap: 1920, quality: 0.85, format: 'jpeg' },
@@ -39,7 +40,8 @@ await build({
   configFile: false,
   logLevel: 'warn',
   base: '/',
-  build: { outDir, emptyOutDir: true, rollupOptions: { input: path.join(root, 'bench/index.html') } },
+  // The HEIC decoder chunk (~3 MB) is expected; don't warn about it.
+  build: { outDir, emptyOutDir: true, chunkSizeWarningLimit: 3500, rollupOptions: { input: path.join(root, 'bench/index.html') } },
   worker: { format: 'es' },
 });
 const ORIGIN = 'https://bench.test';
@@ -54,18 +56,31 @@ async function serve(context) {
   });
 }
 
-/** Sum RSS (MB) of every process whose command line points into our Playwright browsers dir. */
-function sampleRss() {
+/**
+ * Install root of a Playwright browser (e.g. ".../ms-playwright/chromium_headless_shell-1243"),
+ * wherever Playwright keeps browsers on this machine. All of the browser's processes
+ * (renderer, GPU, network, WebKit XPC services, Firefox content processes) run from it.
+ */
+function installRoot(type) {
+  const exe = type.executablePath();
+  const m = exe.match(/^(.*?[\\/](?:chromium|chromium_headless_shell|firefox|webkit)-\d+)(?:[\\/]|$)/);
+  return m ? m[1] : path.dirname(exe);
+}
+
+/** Sum RSS (MB) of every process whose command line points into `browserRoot`. */
+function sampleRss(browserRoot) {
   try {
     const out = execFileSync('ps', ['-axo', 'rss=,command='], { encoding: 'utf8', maxBuffer: 1 << 24 });
-    let total = 0, max = 0;
+    let total = 0, max = 0, count = 0;
     for (const line of out.split('\n')) {
-      if (!line.includes('.playwright-browsers')) continue;
+      if (!line.includes(browserRoot)) continue;
       const kb = parseInt(line.trim(), 10) || 0;
       total += kb;
       max = Math.max(max, kb);
+      count++;
     }
-    return { total: total / 1024, max: max / 1024 };
+    // No matching processes means sampling failed, not zero memory.
+    return count ? { total: total / 1024, max: max / 1024 } : { total: NaN, max: NaN };
   } catch {
     return { total: NaN, max: NaN };
   }
@@ -79,6 +94,7 @@ for (const name of browsers) {
     const cfg = configs[i];
     // Fresh browser per config so memory numbers are not polluted by previous runs.
     const browser = await type.launch();
+    const browserRoot = installRoot(type);
     const context = await browser.newContext();
     await serve(context);
     const page = await context.newPage();
@@ -87,9 +103,9 @@ for (const name of browsers) {
     await page.goto(`${ORIGIN}/bench/index.html`);
     await page.waitForFunction(() => document.getElementById('log')?.textContent === 'ready', null, { timeout: 60000 });
     const caps = await page.evaluate(() => window.detectCapabilities());
-    const baseline = sampleRss();
+    const baseline = sampleRss(browserRoot);
     const samples = [];
-    const timer = setInterval(() => samples.push(sampleRss()), 150);
+    const timer = setInterval(() => samples.push(sampleRss(browserRoot)), 150);
     const res = await page.evaluate((c) => window.runBench(c), cfg);
     clearInterval(timer);
     await browser.close();
@@ -97,6 +113,7 @@ for (const name of browsers) {
     const sum = (k) => res.rows.reduce((a, r) => a + r[k], 0);
     const sorted = res.rows.map((r) => r.ms).sort((a, b) => a - b);
     const peak = Math.max(...samples.map((s) => s.total));
+    if (!Number.isFinite(peak)) console.warn(`[bench] could not sample memory for processes under ${browserRoot}`);
     const q = Math.floor(samples.length / 4) || 1;
     const avg = (arr) => arr.reduce((a, s) => a + s.total, 0) / arr.length;
     const summary = {
