@@ -42,7 +42,7 @@ async function setupGreenLogo(page: Page, share: number) {
 
 test('graphics are stored byte-for-byte; unsupported files are rejected', async ({ page }) => {
   await openApp(page);
-  await uploadGraphics(page, ['logo.svg', 'sponsor.png']);
+  await uploadGraphics(page, ['logo.svg', 'sponsor.png', 'sunset.jpg']);
   const stored = await page.evaluate(async () => {
     const req = indexedDB.open('tessera');
     const db: IDBDatabase = await new Promise((r) => (req.onsuccess = () => r(req.result)));
@@ -60,11 +60,11 @@ test('graphics are stored byte-for-byte; unsupported files are rejected', async 
       }),
     );
   });
-  const expected = ['logo.svg', 'sponsor.png'].map((n) => fs.readFileSync(`${FIXTURES}/${n}`).toString('base64'));
+  const expected = ['logo.svg', 'sponsor.png', 'sunset.jpg'].map((n) => fs.readFileSync(`${FIXTURES}/${n}`).toString('base64'));
   expect(stored.sort()).toEqual(expected.sort());
 
-  await page.getByTestId('graphic-upload').setInputFiles(fixture('sunset.jpg'));
-  await expect(page.getByRole('alert')).toContainText('Only PNG and SVG');
+  await page.getByTestId('graphic-upload').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  await expect(page.getByRole('alert')).toContainText('can’t be used as a graphic');
 });
 
 test('Crossfade shows a graphic slide on its background colour at its share', async ({ page }) => {

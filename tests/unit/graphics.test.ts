@@ -17,18 +17,43 @@ const SVG_VIEWBOX = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 12
 const svgFile = (text: string, name = 'logo.svg') => new File([text], name, { type: 'image/svg+xml' });
 const pngFile = async (w = 64, h = 32, name = 'sponsor.png') =>
   new File([await sharp({ create: { width: w, height: h, channels: 4, background: '#f00f' } }).png().toBuffer()], name, { type: 'image/png' });
+const rasterFile = async (format: 'jpeg' | 'webp' | 'gif' | 'avif', w = 30, h = 20) =>
+  new File([await sharp({ create: { width: w, height: h, channels: 4, background: '#f00f' } })[format]().toBuffer()], `logo.${format}`);
+const bmpFile = (w: number, h: number) => {
+  const b = new Uint8Array(54);
+  const v = new DataView(b.buffer);
+  b.set([0x42, 0x4d]);
+  v.setInt32(18, w, true);
+  v.setInt32(22, h, true);
+  return new File([b], 'logo.bmp');
+};
 
 describe('graphic files', () => {
   it('accepts PNG and SVG and reads their intrinsic size', async () => {
-    expect(await inspectGraphicFile(await pngFile(64, 32))).toEqual({ type: 'png', width: 64, height: 32 });
-    expect(await inspectGraphicFile(svgFile(SVG_VIEWBOX))).toEqual({ type: 'svg', width: 400, height: 120 });
+    expect(await inspectGraphicFile(await pngFile(64, 32))).toMatchObject({ type: 'png', width: 64, height: 32 });
+    expect(await inspectGraphicFile(svgFile(SVG_VIEWBOX))).toMatchObject({ type: 'svg', width: 400, height: 120 });
     const withDecl = `﻿<?xml version="1.0"?>\n<!-- logo -->\n<!DOCTYPE svg>\n${SVG_VIEWBOX}`;
     expect((await inspectGraphicFile(svgFile(withDecl))).type).toBe('svg');
   });
 
+  it('accepts JPEG, WebP, GIF, AVIF and BMP as-is', async () => {
+    for (const format of ['jpeg', 'webp', 'gif', 'avif'] as const) {
+      const file = await rasterFile(format);
+      const r = await inspectGraphicFile(file);
+      expect(r).toMatchObject({ type: format, width: 30, height: 20 });
+      expect(r.file).toBe(file);
+    }
+    expect(await inspectGraphicFile(bmpFile(30, 20))).toMatchObject({ type: 'bmp', width: 30, height: 20 });
+  });
+
+  it('reports a rotated JPEG at its displayed size', async () => {
+    const buf = await sharp({ create: { width: 30, height: 20, channels: 3, background: '#f00' } }).jpeg().withMetadata({ orientation: 6 }).toBuffer();
+    expect(await inspectGraphicFile(new File([buf], 'r.jpg'))).toMatchObject({ type: 'jpeg', width: 20, height: 30 });
+  });
+
   it('rejects other formats and SVGs without a usable size', async () => {
-    const jpeg = new File([await sharp({ create: { width: 8, height: 8, channels: 3, background: '#000' } }).jpeg().toBuffer()], 'a.jpg');
-    await expect(inspectGraphicFile(jpeg)).rejects.toBeInstanceOf(GraphicFileError);
+    const tiff = new File([await sharp({ create: { width: 8, height: 8, channels: 3, background: '#000' } }).tiff().toBuffer()], 'a.tif');
+    await expect(inspectGraphicFile(tiff)).rejects.toBeInstanceOf(GraphicFileError);
     await expect(inspectGraphicFile(new File(['hello'], 'a.txt'))).rejects.toBeInstanceOf(GraphicFileError);
     await expect(inspectGraphicFile(svgFile('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'))).rejects.toThrow(/viewBox/);
   });
@@ -50,14 +75,15 @@ describe('graphic storage', () => {
     await db.open();
   });
 
-  it('stores uploads byte-for-byte, PNG and SVG', async () => {
-    for (const file of [await pngFile(300, 100), svgFile(SVG_VIEWBOX)]) {
+  it('stores uploads byte-for-byte, with their type', async () => {
+    for (const file of [await pngFile(300, 100), svgFile(SVG_VIEWBOX), await rasterFile('jpeg')]) {
       const g = await addGraphic(file);
       const stored = new Uint8Array(await (await getGraphicFile(g.id))!.arrayBuffer());
       expect(stored).toEqual(new Uint8Array(await file.arrayBuffer()));
       expect(g).toMatchObject({ background: '#000000', scalePct: 80, fullScreen: false });
     }
-    expect((await listGraphics()).map((g) => g.name)).toEqual(['sponsor', 'logo']);
+    expect((await listGraphics()).map((g) => g.name)).toEqual(['sponsor', 'logo', 'logo']);
+    expect((await getGraphicFile((await listGraphics())[2].id))!.type).toBe('image/jpeg');
   });
 
   it('stores byte-for-byte in the ArrayBuffer fallback too (WebKit private sessions)', async () => {

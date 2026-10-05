@@ -109,10 +109,10 @@ scripts/build-sw.mjs       Workbox generateSW over dist/
 
 ### Logos and sponsor graphics
 
-Under **Logos & graphics** in the sidebar you can upload PNG or SVG files (up to 25 MB each).
+Under **Logos & graphics** in the sidebar you can upload PNG, JPEG, SVG, WebP, GIF, AVIF, BMP or HEIC/HEIF files (up to 25 MB each).
 
-- **Stored byte-for-byte.** Graphics are never resized, re-encoded or stripped. An SVG missing `width`/`height` is drawn from an in-memory copy with those attributes added, because Firefox can't draw it to a canvas otherwise. The stored file is never changed.
-- **Shown whole.** A graphic is always contained, never cropped. It sits on its **background colour** at its **size within its space** (default 80%). SVGs scale freely; PNGs are never enlarged past their native size. An SVG loaded as an image can't run scripts.
+- **Stored byte-for-byte.** Graphics are never resized, re-encoded or stripped. The one exception is HEIC/HEIF, which most browsers can't display: it's converted once, losslessly, to PNG. An SVG missing `width`/`height` is drawn from an in-memory copy with those attributes added, because Firefox can't draw it to a canvas otherwise. The stored file is never changed.
+- **Shown whole.** A graphic is always contained, never cropped. It sits on its **background colour** at its **size within its space** (default 80%). SVGs scale freely; bitmaps (PNG, JPEG, etc.) are never enlarged past their native size. JPEGs follow their EXIF rotation. Animated GIF/WebP files animate as a corner logo but show their first frame in the slideshow. An SVG loaded as an image can't run scripts.
 - **Share per collection.** Each collection sets how often each graphic appears: 0–50%, with all graphics together capped at 90%.
   - **Crossfade:** % of slides.
   - **Sliding Panels:** % of layouts.

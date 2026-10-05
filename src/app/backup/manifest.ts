@@ -12,7 +12,8 @@
  * reading anything else. Imports treat the file as untrusted: the manifest is
  * validated and only paths it lists (under the folders above) are read.
  */
-import type { Graphic, PlaybackSettings, Photo } from '../db/db';
+import type { Graphic, GraphicType, PlaybackSettings, Photo } from '../db/db';
+import { GRAPHIC_MIME } from '../graphics/graphics';
 
 export const EXPORT_FORMAT = 'tessera-library';
 export const EXPORT_VERSION = 1;
@@ -95,12 +96,12 @@ export function parseManifest(raw: unknown): ExportManifest {
 
   const graphics: ManifestGraphic[] = [];
   for (const g of raw.graphics) {
-    if (!isObj(g) || !str(g.id, 100) || (g.type !== 'png' && g.type !== 'svg') || !num(g.width) || !num(g.height)) continue;
+    if (!isObj(g) || !str(g.id, 100) || !(typeof g.type === 'string' && g.type in GRAPHIC_MIME) || !num(g.width) || !num(g.height)) continue;
     if (!path(g.file, 'graphics')) continue;
     graphics.push({
       id: g.id as string,
       name: str(g.name, 200) ? (g.name as string) : 'Graphic',
-      type: g.type,
+      type: g.type as GraphicType,
       width: g.width as number,
       height: g.height as number,
       bytes: num(g.bytes) ? (g.bytes as number) : 0,

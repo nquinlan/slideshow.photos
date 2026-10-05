@@ -19,7 +19,7 @@ import {
   type PlaybackSettings,
   type Photo,
 } from './db';
-import { inspectGraphicFile } from '../graphics/graphics';
+import { GRAPHIC_MIME, inspectGraphicFile } from '../graphics/graphics';
 
 export interface CollectionSummary extends Collection {
   count: number;
@@ -310,23 +310,24 @@ export async function listGraphics(): Promise<Graphic[]> {
 }
 
 /**
- * Store an uploaded PNG/SVG exactly as uploaded (no resizing or re-encoding).
- * Throws GraphicFileError for unsupported or unreadable files.
+ * Store an uploaded graphic exactly as uploaded (no resizing or re-encoding;
+ * HEIC is converted to PNG). Throws GraphicFileError for unsupported or
+ * unreadable files.
  */
 export async function addGraphic(file: File): Promise<Graphic> {
-  const { type, width, height } = await inspectGraphicFile(file);
+  const { type, width, height, file: stored } = await inspectGraphicFile(file);
   return addGraphicRecord(
     {
-      name: file.name.replace(/\.(png|svg)$/i, '') || 'Graphic',
+      name: file.name.replace(/\.(png|jpe?g|webp|gif|avif|bmp|svg|heic|heif)$/i, '') || 'Graphic',
       type,
       width,
       height,
-      bytes: file.size,
+      bytes: stored.size,
       background: '#000000',
       scalePct: 80,
       fullScreen: false,
     },
-    file,
+    stored,
   );
 }
 
@@ -374,7 +375,7 @@ export async function appendToCollection(collectionId: string, photoIds: string[
 /** Add a graphic with known settings and file (used by library import); file stored byte-for-byte. */
 export async function addGraphicRecord(g: Omit<Graphic, 'id' | 'addedAt'>, file: Blob): Promise<Graphic> {
   const graphic: Graphic = { ...g, id: uid(), addedAt: Date.now() };
-  const blob = new Blob([file], { type: g.type === 'svg' ? 'image/svg+xml' : 'image/png' });
+  const blob = new Blob([file], { type: GRAPHIC_MIME[g.type] });
   const write = async (mode: 'blob' | 'buffer') => {
     const stored = await toStored(blob, mode);
     const db = getDB();

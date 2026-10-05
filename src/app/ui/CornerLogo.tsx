@@ -5,7 +5,7 @@ import { getGraphicFile } from '../db/repo';
 /**
  * A graphic that stays on screen during playback, over every format. Drawn as
  * a plain <img> of the uploaded file (byte-for-byte), so SVGs stay vector and
- * crisp at any size; PNGs are never enlarged past their native size.
+ * crisp at any size; bitmaps (PNG, JPEG, …) are never enlarged past their native size.
  */
 export function CornerLogo({ settings, graphic }: { settings: CornerLogoSettings; graphic: Graphic | undefined }) {
   const [url, setUrl] = useState<string>();
@@ -27,8 +27,8 @@ export function CornerLogo({ settings, graphic }: { settings: CornerLogoSettings
 
   if (!graphic || !url) return null;
   const [v, h] = settings.position.split('-') as ['top' | 'bottom', 'left' | 'right'];
-  // PNG: at most its native pixel width (in CSS px at this device's pixel ratio).
-  const nativeCss = graphic.type === 'png' ? `${graphic.width / (globalThis.devicePixelRatio || 1)}px` : 'none';
+  // Bitmap: at most its native pixel width (in CSS px at this device's pixel ratio).
+  const nativeCss = graphic.type !== 'svg' ? `${graphic.width / (globalThis.devicePixelRatio || 1)}px` : 'none';
   return (
     <div
       className={`corner-logo${settings.plate ? ' has-plate' : ''}`}

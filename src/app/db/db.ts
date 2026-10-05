@@ -152,15 +152,17 @@ export interface CollectionGraphics {
 
 export const DEFAULT_GRAPHICS: CollectionGraphics = { share: {}, corner: null };
 
+export type GraphicType = 'png' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp' | 'svg';
+
 /**
  * A logo or sponsor graphic. The uploaded file is stored byte-for-byte in
- * `graphicFiles` (never resized or re-encoded).
+ * `graphicFiles` (never resized or re-encoded; HEIC is converted to PNG once).
  */
 export interface Graphic {
   id: string;
   name: string;
-  type: 'png' | 'svg';
-  /** Intrinsic size (SVG: from width/height or viewBox). */
+  type: GraphicType;
+  /** Intrinsic size (SVG: from width/height or viewBox; JPEG: after EXIF rotation). */
   width: number;
   height: number;
   bytes: number;

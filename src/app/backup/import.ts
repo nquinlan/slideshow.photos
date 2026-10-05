@@ -30,7 +30,7 @@ import {
   deleteCollection,
   deleteGraphic,
 } from '../db/repo';
-import { sniffGraphicType } from '../graphics/graphics';
+import { GRAPHIC_MIME, sniffGraphicType } from '../graphics/graphics';
 import { BackupError, parseManifest, type ExportManifest } from './manifest';
 
 configure({ useWebWorkers: false });
@@ -210,7 +210,7 @@ export async function importBackup(
       for (const g of m.graphics) {
         check();
         onProgress?.({ phase: 'graphics', done: i++, total: m.graphics.length });
-        const blob = await read(g.file, g.type === 'svg' ? 'image/svg+xml' : 'image/png');
+        const blob = await read(g.file, GRAPHIC_MIME[g.type]);
         if (!blob || sniffGraphicType(new Uint8Array(await blob.slice(0, 4096).arrayBuffer())) !== g.type) {
           result.skipped++;
           continue;

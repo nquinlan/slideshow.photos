@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { DEFAULT_GRAPHICS, type CollectionGraphics, type Corner, type Graphic } from '../db/db';
 import { addGraphic, deleteGraphic, getGraphicFile, updateGraphic } from '../db/repo';
-import { GraphicFileError, MAX_TOTAL_SHARE } from '../graphics/graphics';
+import { GRAPHIC_ACCEPT, GraphicFileError, MAX_TOTAL_SHARE } from '../graphics/graphics';
 
 interface Props {
   graphics: Graphic[];
@@ -71,14 +71,14 @@ export function GraphicsPanel({ graphics, settings, onSettingsChange, onLibraryC
     <details className="graphics-panel" open={graphics.length > 0 || undefined}>
       <summary>Logos &amp; graphics</summary>
       <p className="help">
-        Show your logo or sponsors between photos. PNG and SVG files are used exactly as uploaded and always shown whole on
-        their background colour.
+        Show your logo or sponsors between photos. Images (PNG, JPEG, SVG, WebP and more) are used exactly as uploaded and
+        always shown whole on their background colour. SVG stays sharp at any size.
       </p>
       <label className="btn small upload">
-        {busy ? 'Adding…' : 'Add PNG or SVG'}
+        {busy ? 'Adding…' : 'Add images'}
         <input
           type="file"
-          accept=".png,.svg,image/png,image/svg+xml"
+          accept={GRAPHIC_ACCEPT}
           multiple
           className="visually-hidden"
           disabled={busy}
