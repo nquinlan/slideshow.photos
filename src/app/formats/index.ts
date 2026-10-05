@@ -1,0 +1,22 @@
+/**
+ * Format registry. To add a format: implement SlideshowFormat (see types.ts)
+ * and append it here — the settings UI and player pick it up automatically.
+ */
+import { crossfade } from './crossfade';
+import { slidingTiles } from './slidingTiles';
+import type { SlideshowFormat } from './types';
+
+export const FORMATS: SlideshowFormat<any>[] = [slidingTiles, crossfade];
+
+export const REDUCED_MOTION_FORMAT_ID = 'crossfade';
+
+export function getFormat(id: string): SlideshowFormat<any> {
+  return FORMATS.find((f) => f.id === id) ?? FORMATS[0];
+}
+
+/** The format actually used for playback, honouring prefers-reduced-motion. */
+export function effectiveFormat(id: string, reducedMotion: boolean): SlideshowFormat<any> {
+  return reducedMotion ? getFormat(REDUCED_MOTION_FORMAT_ID) : getFormat(id);
+}
+
+export type { SlideshowFormat } from './types';
