@@ -7,7 +7,8 @@ import { thumbUrl } from './thumbs';
  * Larger preview of one library photo, in a modal dialog. Shows the stored
  * slideshow copy (the thumbnail stands in while it loads), keeps the photo's
  * selection checkbox, steps through the collection with ←/→ or the buttons,
- * and can start the slideshow from this photo.
+ * can remove just this photo from the collection, and can start the
+ * slideshow from it.
  */
 export function PhotoPreview({
   photos,
@@ -16,6 +17,7 @@ export function PhotoPreview({
   onToggle,
   onNavigate,
   onPlayFrom,
+  onRemove,
   onClose,
 }: {
   photos: Photo[];
@@ -24,6 +26,7 @@ export function PhotoPreview({
   onToggle(): void;
   onNavigate(index: number): void;
   onPlayFrom(): void;
+  onRemove(): void;
   onClose(): void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -82,6 +85,9 @@ export function PhotoPreview({
           {(index + 1).toLocaleString()} of {photos.length.toLocaleString()}
         </span>
         <span className="spacer" />
+        <button type="button" className="btn ghost small danger" onClick={onRemove}>
+          Remove from collection
+        </button>
         <button type="button" className="btn ghost small" onClick={onClose}>
           Close
         </button>

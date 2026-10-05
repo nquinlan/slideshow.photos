@@ -233,12 +233,11 @@ export default function App() {
     if (files.length) await startImport(filesToItems(files), 'dropped files');
   }
 
-  async function removeSelected() {
-    if (!collection || !selected.size) return;
-    const ids = [...selected];
+  async function removePhotos(ids: string[]) {
+    if (!collection || !ids.length) return;
     await removeFromCollection(collection.id, ids);
     forgetThumbs(ids);
-    setSelected(new Set());
+    setSelected((s) => new Set([...s].filter((id) => !ids.includes(id))));
     await refresh();
   }
 
@@ -412,7 +411,7 @@ export default function App() {
                 <button type="button" className="btn ghost small" onClick={() => setSelected(new Set())}>
                   Clear
                 </button>
-                <button type="button" className="btn danger" onClick={() => void removeSelected()}>
+                <button type="button" className="btn danger" onClick={() => void removePhotos([...selected])}>
                   Remove from collection
                 </button>
               </>
@@ -442,7 +441,13 @@ export default function App() {
               </p>
             </div>
           )}
-          <Library photos={photos} selected={selected} onSelectionChange={setSelected} onPlayFrom={(id) => play(id)} />
+          <Library
+            photos={photos}
+            selected={selected}
+            onSelectionChange={setSelected}
+            onPlayFrom={(id) => play(id)}
+            onRemove={removePhotos}
+          />
         </main>
 
         <aside className="app-side" aria-label="Slideshow">

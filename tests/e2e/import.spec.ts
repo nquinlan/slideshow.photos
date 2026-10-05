@@ -153,3 +153,32 @@ test('the expand button previews a photo larger and keeps selection', async ({ p
   await expect(page.getByText('1 selected')).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Select sunset.jpg' })).toBeChecked();
 });
+
+test('a portrait photo previews whole, and the preview removes just that photo', async ({ page }) => {
+  await openApp(page);
+  await addPhotos(page, ALL);
+  await expectPhotoCount(page, 5);
+  await page.getByRole('checkbox', { name: 'Select ocean.jpg' }).check({ force: true });
+
+  await page.getByRole('img', { name: 'rotated-exif6.jpg' }).hover();
+  await page.getByRole('button', { name: 'Preview rotated-exif6.jpg' }).click();
+  const preview = page.getByTestId('photo-preview');
+  const img = preview.getByRole('img', { name: 'rotated-exif6.jpg' });
+  await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(320);
+  // Contained: the image box stays inside the stage, so object-fit shows the whole portrait photo.
+  const [box, stage] = await Promise.all([img.boundingBox(), preview.locator('.preview-stage').boundingBox()]);
+  expect(box!.height).toBeLessThanOrEqual(stage!.height + 1);
+  expect(await img.evaluate((i) => getComputedStyle(i).objectFit)).toBe('contain');
+
+  await preview.getByRole('button', { name: 'Remove from collection' }).click();
+  await expectPhotoCount(page, 4);
+  // Moves on to another photo rather than closing.
+  await expect(preview).toBeVisible();
+  await expect(preview.getByRole('img', { name: 'rotated-exif6.jpg' })).toHaveCount(0);
+  await expect(preview).toContainText('of 4');
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('img', { name: 'rotated-exif6.jpg' })).toHaveCount(0);
+  await expect(page.getByText('1 selected')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Select ocean.jpg' })).toBeChecked();
+});

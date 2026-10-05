@@ -9,6 +9,7 @@ interface Props {
   selected: Set<string>;
   onSelectionChange(next: Set<string>): void;
   onPlayFrom(photoId: string): void;
+  onRemove(photoIds: string[]): Promise<void>;
 }
 
 const MIN_TILE = 132;
@@ -20,7 +21,7 @@ const GAP = 6;
  * real checkbox for selection (keyboard + screen-reader friendly) plus an
  * expand button that opens a larger preview. Shift-click selects a range.
  */
-export function Library({ photos, selected, onSelectionChange, onPlayFrom }: Props) {
+export function Library({ photos, selected, onSelectionChange, onPlayFrom, onRemove }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const [offset, setOffset] = useState(0);
@@ -115,6 +116,12 @@ export function Library({ photos, selected, onSelectionChange, onPlayFrom }: Pro
           onPlayFrom={() => {
             setPreviewId(undefined);
             onPlayFrom(photos[previewIndex].id);
+          }}
+          onRemove={() => {
+            // Move on to the next photo (or the previous one at the end); close when none are left.
+            const id = photos[previewIndex].id;
+            setPreviewId((photos[previewIndex + 1] ?? photos[previewIndex - 1])?.id);
+            void onRemove([id]);
           }}
           onClose={closePreview}
         />
