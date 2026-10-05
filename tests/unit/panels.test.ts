@@ -98,6 +98,21 @@ describe('Sliding Panels photo matching', () => {
     expect(['land1', 'land2']).not.toContain(ids[0]);
   });
 
+  it('only gives a tile a photo big enough to fill it, searching beyond the random sample', () => {
+    const tiny = Array.from({ length: 200 }, (_, i) => p(`tiny${i}`, 300, 200, 1));
+    const big = p('big', 2400, 1600, 1.5);
+    const tile: Rect = { x: 0, y: 0, w: 1800, h: 1200 };
+    for (let seed = 1; seed <= 20; seed++) {
+      const ids = assignPhotos([tile], [...tiny, big], { random: rng(seed), sampleSize: 8 });
+      expect(ids).toEqual(['big']);
+    }
+  });
+
+  it('falls back to the closest match when no photo is big enough', () => {
+    const ids = assignPhotos([{ x: 0, y: 0, w: 1800, h: 1200 }], [p('a', 300, 200, 1), p('b', 200, 300, 1)], { random: () => 0.1 });
+    expect(ids).toEqual(['a']); // same shape as the tile
+  });
+
   it('penalises photos that would need upscaling past their original', () => {
     const tile: Rect = { x: 0, y: 0, w: 1800, h: 1200 };
     expect(matchCost(p('tiny', 600, 400, 1), tile)).toBeGreaterThan(matchCost(p('big', 1920, 1280, 1), tile));
@@ -187,10 +202,10 @@ describe('Sliding Panels motion', () => {
     expect(draws).toEqual([100 + 200, 100 - 200]); // left half pushed right, right half pushed left
   });
 
-  it('never upscales: a small photo is drawn at native size, centred in its tile', () => {
+  it('always covers its tile edge to edge, even with a photo too small to fill it (no gaps)', () => {
     const r = recorder();
     drawPanel(r.ctx, { source: {} as CanvasImageSource, width: 400, height: 225, maxScale: 1 }, tile, { axis: 'y', anchor: 'start' }, 1);
-    expect(r.ops[1]).toEqual({ draw: { x: 100 + 200, y: 50 + 112.5, w: 400, h: 225 } });
+    expect(r.ops[1]).toEqual({ draw: { x: 100, y: 50, w: 800, h: 450 } });
   });
 });
 

@@ -50,8 +50,10 @@ export function drawPanel(
   seam = 0,
 ) {
   if (!img || visible <= 0) return;
-  // Cover the tile, centre-cropped, but never upscale past the original.
-  const d = fitRect(img.width, img.height, rect.w, rect.h, 'cover', img.maxScale);
+  // Always cover the tile, centre-cropped: panels never show gaps. Matching
+  // (match.ts) ensures photos are big enough whenever the library allows, so
+  // enlarging past the original only happens as a last resort.
+  const d = fitRect(img.width, img.height, rect.w, rect.h, 'cover');
   const dx = rect.x + d.x;
   const dy = rect.y + d.y;
   const hidden = 1 - Math.min(1, visible);

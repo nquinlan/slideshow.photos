@@ -95,7 +95,10 @@ scripts/build-sw.mjs       Workbox generateSW over dist/
   - **Sliding Panels** (default): a collage of up to 6 photos in a random layout, matched to panel shape and cover-cropped. It holds still for the interval, then the panels slide out to black, there's a short black beat, and a new layout slides in (about 0.9 s total). `→` skips ahead; `←` goes back through earlier layouts.
   - **Floating:** photos drift across the screen at three depths, with parallax. Each photo is pre-rendered once into a sprite, so each frame is one `drawImage` per photo. `→` brings in another photo.
   - **Crossfade:** one photo at a time.
-- **No upscaling.** Photos are never drawn larger than their original resolution. A small photo is shown centred at its native size instead.
+- **No upscaling.**
+  - **Crossfade:** photos are never drawn larger than their original resolution. A small photo is shown centred at its native size instead.
+  - **Floating:** photos are capped at their original size.
+  - **Sliding Panels:** panels are always filled edge to edge. Each panel only gets a photo big enough to fill it, from anywhere in the collection. A photo is enlarged only when nothing in the collection is big enough.
 - **Memory.**
   - Crossfade keeps only the current photo and the next 3 decoded.
   - Sliding Panels and Floating decode each photo only as large as the area it fills.
