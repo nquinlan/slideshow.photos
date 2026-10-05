@@ -682,3 +682,110 @@ input[type='radio'] {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Logos & graphics */
+.graphics-panel {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+.graphics-panel > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.graphics-panel .upload {
+  margin: 0.5rem 0;
+  cursor: pointer;
+}
+.graphics-panel .upload:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.graphics-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.graphic-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.6rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.graphic-preview {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.graphic-preview img {
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+.graphic-fields {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.graphic-name {
+  min-height: 2rem !important;
+  padding: 0.2rem 0.4rem !important;
+  font-weight: 600;
+}
+.graphic-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.color-field input[type='color'] {
+  width: 2rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+}
+.corner-logo-settings {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* Corner logo during playback: above the canvas, below the controls. */
+.corner-logo {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  line-height: 0;
+  border-radius: 1vmin;
+}
+.corner-logo.has-plate {
+  padding: 1vmin 1.4vmin;
+}
+.corner-logo img {
+  display: block;
+  height: auto;
+}
+.player-controls,
+.player-hint,
+.player-error,
+.player-loading {
+  z-index: 2;
+}

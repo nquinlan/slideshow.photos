@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { SITE } from '../../site';
-import { DEFAULT_APP_SETTINGS, type AppSettings, type Collection, type ImportJob, type PlaybackSettings, type Photo } from '../db/db';
+import {
+  DEFAULT_APP_SETTINGS,
+  type AppSettings,
+  type Collection,
+  type Graphic,
+  type ImportJob,
+  type PlaybackSettings,
+  type Photo,
+} from '../db/db';
 import {
   createCollection,
   deleteAllOriginals,
@@ -12,6 +20,7 @@ import {
   getPhotos,
   libraryUsage,
   listCollections,
+  listGraphics,
   removeFromCollection,
   renameCollection,
   saveAppSettings,
@@ -29,6 +38,7 @@ import type { PhotoInfo } from '../formats/types';
 import { enterFullscreen } from '../player/fullscreen';
 import { toPhotoInfo } from '../player/photos';
 import { GooglePhotosImport } from './GooglePhotos';
+import { GraphicsPanel } from './GraphicsPanel';
 import { useOnline, useStorageInfo } from './hooks';
 import { ImportConfirmDialog, ImportPanel, InterruptedJobs, StorageMeter, type PendingImport } from './ImportUI';
 import { Library } from './Library';
@@ -59,6 +69,8 @@ export default function App() {
   const [dataVersion, setDataVersion] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [ready, setReady] = useState(false);
+  const [graphics, setGraphics] = useState<Graphic[]>([]);
+  const reloadGraphics = useCallback(async () => setGraphics(await listGraphics()), []);
   const storage = useStorageInfo(dataVersion);
   const playerRef = useRef<PlayerHandle>(null);
   // Imports need the current collection, which loads asynchronously from IndexedDB at
@@ -97,10 +109,11 @@ export default function App() {
       const id = cols.find((c) => c.id === settings.lastCollectionId)?.id ?? cols[0].id;
       await loadCollection(id);
       setUsage(await libraryUsage());
+      await reloadGraphics();
       setReady(true);
     })();
     return importService.subscribe(setImportState);
-  }, [loadCollection]);
+  }, [loadCollection, reloadGraphics]);
 
   // Pull newly imported photos into the grid while an import runs (throttled).
   const progressCount = importState.progress
@@ -251,6 +264,7 @@ export default function App() {
       <Player
         ref={playerRef}
         photos={playing.photos}
+        graphics={graphics}
         startPhotoId={playing.startPhotoId}
         settings={collection.settings}
         onExit={stopPlaying}
@@ -421,6 +435,14 @@ export default function App() {
         <aside className="app-side" aria-label="Slideshow">
           <h2>Slideshow</h2>
           {collection && <SlideshowSettings settings={collection.settings} onChange={changePlayback} />}
+          {collection && (
+            <GraphicsPanel
+              graphics={graphics}
+              settings={collection.settings.graphics}
+              onSettingsChange={(g) => changePlayback({ ...collection.settings, graphics: g })}
+              onLibraryChange={() => void reloadGraphics()}
+            />
+          )}
           <button
             id="play-button"
             type="button"

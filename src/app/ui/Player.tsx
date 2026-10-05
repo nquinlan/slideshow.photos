@@ -1,6 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { PlaybackSettings } from '../db/db';
-import { getDisplay } from '../db/repo';
+import type { Graphic } from '../db/db';
+import { getDisplay, getGraphicFile } from '../db/repo';
+import { enabledGraphics } from '../graphics/graphics';
+import { CornerLogo } from './CornerLogo';
 import type { PhotoInfo } from '../formats/types';
 import { SlideshowEngine, type EngineState } from '../player/engine';
 import {
@@ -16,6 +19,8 @@ import { useReducedMotion } from './hooks';
 
 interface Props {
   photos: PhotoInfo[];
+  /** The graphics library; which ones show (and how often) comes from settings.graphics. */
+  graphics: Graphic[];
   settings: PlaybackSettings;
   startPhotoId?: string;
   onExit(): void;
@@ -28,7 +33,7 @@ export interface PlayerHandle {
 const IDLE_MS = 2500;
 const SWIPE_PX = 50;
 
-export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, settings, startPhotoId, onExit }, ref) {
+export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, graphics, settings, startPhotoId, onExit }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<SlideshowEngine | null>(null);
@@ -55,6 +60,8 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
       startPhotoId,
       viewport: { width: root.clientWidth || innerWidth, height: root.clientHeight || innerHeight, devicePixelRatio: devicePixelRatio || 1 },
       loadBlob: getDisplay,
+      graphics: graphicItems,
+      loadGraphic: getGraphicFile,
       onState: setState,
     });
     engineRef.current = engine;
@@ -74,6 +81,17 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos]);
+
+  // Graphics enabled for this collection; pushed to the engine only when they actually change
+  // (resetting the scheduler on unrelated setting changes would disturb the spacing).
+  const graphicItems = useMemo(() => enabledGraphics(graphics, settings.graphics), [graphics, settings.graphics]);
+  const graphicsKey = JSON.stringify(graphicItems);
+  const appliedGraphics = useRef(graphicsKey);
+  useEffect(() => {
+    if (appliedGraphics.current === graphicsKey) return;
+    appliedGraphics.current = graphicsKey;
+    engineRef.current?.setGraphics(graphicItems);
+  }, [graphicsKey, graphicItems]);
 
   // Live settings / reduced-motion changes.
   useEffect(() => {
@@ -206,6 +224,9 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
       data-position={state?.position ?? -1}
     >
       <canvas ref={canvasRef} className="player-canvas" aria-hidden="true" />
+      {settings.graphics?.corner && (
+        <CornerLogo settings={settings.graphics.corner} graphic={graphics.find((g) => g.id === settings.graphics!.corner!.graphicId)} />
+      )}
       {state?.error && <p className="player-error">{state.error}</p>}
       {!state?.ready && !state?.error && <p className="player-loading">Loading…</p>}
       {hint && (
