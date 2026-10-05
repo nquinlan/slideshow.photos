@@ -6,7 +6,7 @@
  *   PUBLIC_GOOGLE_MEDIA_FETCH How picked photo bytes are downloaded:
  *       'header' (default, documented): Authorization: Bearer header.
  *       'query': ?access_token= on the media URL (avoids a CORS preflight).
- *     Pick whichever the spike (npm run spike) shows works.
+ *     Both were verified to work on 2026-10-05; see the README.
  */
 export const GOOGLE_CLIENT_ID: string = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID ?? '';
 

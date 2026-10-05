@@ -8,6 +8,6 @@
     "baseUrl": ".",
     "paths": { "@app/*": ["src/app/*"] }
   },
-  "include": ["src", "tests", "bench", "spike", "*.ts", "*.mjs"],
+  "include": ["src", "tests", "bench", "*.ts", "*.mjs"],
   "exclude": ["dist", "node_modules", ".playwright-browsers"]
 }

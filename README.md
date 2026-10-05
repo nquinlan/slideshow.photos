@@ -21,7 +21,6 @@ npm run build && npm run preview  # production build, service worker included
 | `npm test` | Unit tests (Vitest): storage, importer, format interface, engine, Escape logic |
 | `npm run test:e2e` | Playwright tests against `astro preview`: import, offline reload, two-stage Escape. Run `npx playwright install` first |
 | `npm run bench` | In-browser pipeline benchmark. Needs `bench/samples/`; see `bench/RESULTS.md` |
-| `npm run spike` | Google Picker feasibility spike; see `spike/README.md` |
 | `npm run gen:assets` | Regenerate icons, OG image and manifest |
 
 Requires Node 22+.
@@ -36,7 +35,7 @@ Requires Node 22+.
    - While the app is in **Testing**, add your Google account under **Test users**. Publishing for everyone may require Google's verification for this scope.
 4. Under **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type **Web application**.
-   - **Authorized JavaScript origins:** `http://localhost:4321` (dev and preview), `http://localhost:5173` (spike), and your production origin, for example `https://slideshow.example.com`.
+   - **Authorized JavaScript origins:** `http://localhost:4321` (dev and preview) and your production origin, for example `https://slideshow.example.com`.
    - **Authorized redirect URIs:** none needed. The token model uses a popup.
 5. Copy the **Client ID**, not the secret, into `.env.local` as `PUBLIC_GOOGLE_CLIENT_ID=...`, then rebuild. Never put the client secret anywhere in this project; the token flow doesn't use one.
 
@@ -44,9 +43,10 @@ Requires Node 22+.
 
 ### Google Photos download works browser-only
 
-Verified with the spike on 2026-10-05 (`spike/README.md` has the details):
+Verified by hand on 2026-10-05 with a real account, using a throwaway test page that has since been removed (it is in git history as `spike/`):
 
 - The documented `Authorization: Bearer` download works directly from the browser, so no proxy or backend is needed.
+- Passing the token as `?access_token=` also works. To use it as a fallback, set `PUBLIC_GOOGLE_MEDIA_FETCH=query`. The trade-off is that the short-lived token appears in request URLs.
 - Sized renditions of HEIC originals arrive as JPEG.
 - Picker sessions last 7 days, so an import can resume after the 1-hour token expires by signing in again.
 
@@ -195,7 +195,7 @@ All processing is local. There are no analytics. Google code is loaded only afte
 - **E2E (Playwright):** 12/12 passing (2026-10-05). Covered:
   - In Chromium, Firefox and WebKit: import, dedupe, EXIF orientation, metadata stripping (GPS, camera and date verified by parsing the stored bytes), and playback.
   - In Chromium only: full-screen/Escape and offline.
-- **Google Photos import:** verified end to end by hand on 2026-10-05 (sign-in → pick → import into the library), plus the browser-only download spike (`spike/README.md`).
+- **Google Photos import:** verified end to end by hand on 2026-10-05 (sign-in → pick → import into the library), including the browser-only download.
 - **Offline in Firefox and Safari: check by hand.** Playwright supports service workers only in Chromium. Its offline mode either bypasses the worker (Firefox) or aborts the page load (WebKit, [microsoft/playwright#42775](https://github.com/microsoft/playwright/issues/42775)). To check: load `/app` once, wait for "Ready to work offline", go offline, reload.
 - **Benchmark:** sizes and speed measured in Chromium (`bench/RESULTS.md`). Memory is still to be measured.
 - **Not yet run:** Lighthouse, and the memory benchmark (`npm run bench -- --only=0`).

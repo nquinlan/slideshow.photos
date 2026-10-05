@@ -33,7 +33,7 @@ const unusedHeic = fs
 const { count, size, warnings } = await generateSW({
   globDirectory: outDir,
   globPatterns: ['**/*.{html,js,mjs,css,svg,png,webmanifest,wasm,txt,xml,ico,woff2}'],
-  globIgnores: ['sw.js', 'workbox-*.js', 'spike/**', 'og.png', ...unusedHeic],
+  globIgnores: ['sw.js', 'workbox-*.js', 'og.png', ...unusedHeic],
   swDest: path.join(outDir, 'sw.js'),
   // The HEIC decoder chunk (libheif WASM inlined) is ~3 MB; precache it so HEIC import works offline.
   maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,

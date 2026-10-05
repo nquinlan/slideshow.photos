@@ -6,7 +6,6 @@ test-results/
 playwright-report/
 bench/samples/
 bench/out/
-spike/.env.local
 .env.local
 .DS_Store
 dist-landing/

@@ -13,7 +13,7 @@ export default defineConfig({
   // service worker's precache (cleanURLs) can resolve offline.
   build: { format: 'file', inlineStylesheets: 'auto' },
   trailingSlash: 'never',
-  integrations: [react(), sitemap({ filter: (page) => !page.includes('/spike') })],
+  integrations: [react(), sitemap()],
   vite: {
     worker: { format: 'es' },
     build: { chunkSizeWarningLimit: 3500 },
