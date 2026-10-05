@@ -16,7 +16,7 @@ export interface FloatingSettings extends FormatSettings {
   crossSeconds: number;
   /** Roughly how many photos are on screen at once. */
   density: number;
-  /** Long edge of a near photo, % of the screen's short side. */
+  /** Long edge of a near photo, % of the screen's short side (far ones are smaller). */
   sizePct: number;
   direction: 'down' | 'up';
   depth: boolean;
@@ -93,6 +93,11 @@ export class FloatingScene implements SceneInstance {
   private ready: Promise<Drifter | null>[] = [];
   private order: number[] = [];
   private orderPos = 0;
+  /**
+   * Photos on screen, waiting to enter, or loading. A photo is never picked
+   * again while reserved, so the same photo can't appear twice at once.
+   */
+  private reserved = new Set<string>();
   private spawned = 0;
   private spawnAcc = 0;
   private paused = false;
@@ -117,15 +122,18 @@ export class FloatingScene implements SceneInstance {
     if (!this.c.library.photos.length) throw new Error('This collection has no photos yet.');
     const { height: H } = this.c.canvas;
     // Start with the screen already populated, spread over the full travel range.
-    const initial = Math.max(1, Math.min(this.c.library.photos.length, Math.round(this.s.density)));
-    const made = await Promise.all(Array.from({ length: initial }, () => this.makeDrifter()));
+    const made = await Promise.all(Array.from({ length: this.density }, () => this.makeDrifter()));
     const ok = made.filter((d): d is Drifter => !!d);
     if (this.destroyed) return ok.forEach((d) => this.release(d));
     if (!ok.length) throw new Error('None of the photos in this collection could be decoded.');
+    const { width: W } = this.c.canvas;
     ok.forEach((d, i) => {
       const span = H + d.sprite.h;
       const at = ((i + this.c.random() * 0.8) / ok.length) * span - d.sprite.h;
       d.y = this.s.direction === 'up' ? H - at - d.sprite.h : at;
+      // Spread horizontally away from photos already placed at overlapping heights.
+      const overlapping = this.drifters.filter((o) => o.y < d.y + d.sprite.h && d.y < o.y + o.sprite.h).map((o) => o.x);
+      d.x = chooseX(W, d.sprite.w * 0.8, overlapping, this.c.random);
       this.drifters.push(d);
     });
     this.drifters.sort((a, b) => a.layer - b.layer);
@@ -184,34 +192,53 @@ export class FloatingScene implements SceneInstance {
     return (this.s.sizePct / 100) * Math.min(W, H);
   }
 
-  /** Seconds between new photos, so about `density` are on screen. */
-  private get spawnEvery() {
-    return this.s.crossSeconds / Math.max(1, this.s.density);
+  /**
+   * Photos on screen at once. Capped below the library size (leaving room
+   * for the two waiting to enter) so a photo never has to repeat on screen.
+   */
+  private get density() {
+    const n = this.c.library.photos.length;
+    return Math.max(1, Math.min(Math.round(this.s.density), n > 3 ? n - 3 : n));
   }
 
-  /** Next photo in order, skipping ones already on screen when the library is big enough. */
+  /** Seconds between new photos, so about `density` are on screen. */
+  private get spawnEvery() {
+    return this.s.crossSeconds / this.density;
+  }
+
+  /**
+   * Next photo in order that isn't reserved, or -1 if every photo is in use.
+   * Tiny libraries (≤ 3 photos) may repeat rather than leave the screen empty.
+   */
   private nextPhotoIndex(): number {
-    const onScreen = new Set(this.drifters.map((d) => d.id));
+    const photos = this.c.library.photos;
     for (let tries = 0; tries < this.order.length; tries++) {
       const i = this.order[this.orderPos++ % this.order.length];
-      if (!onScreen.has(this.c.library.photos[i].id)) return i;
+      if (!this.reserved.has(photos[i].id)) return i;
     }
-    return this.order[this.orderPos++ % this.order.length];
+    return photos.length <= 3 ? this.order[this.orderPos++ % this.order.length] : -1;
   }
 
   private async makeDrifter(): Promise<Drifter | null> {
     const photos = this.c.library.photos;
     for (let attempt = 0; attempt < Math.min(5, photos.length); attempt++) {
-      const info = photos[this.nextPhotoIndex()];
+      const index = this.nextPhotoIndex();
+      if (index < 0) return null; // every photo is on screen or about to be; skip this spawn
+      const info = photos[index];
+      this.reserved.add(info.id);
       const layer = this.s.depth ? Math.floor(this.c.random() * LAYERS.length) : LAYERS.length - 1;
       const { scale, dim } = LAYERS[layer];
       const size = drifterSize(info, this.base, scale);
       const photo = await this.c.library.load(info.id, { width: size.w, height: size.h });
       if (this.destroyed) {
         photo?.close();
+        this.reserved.delete(info.id);
         return null;
       }
-      if (!photo) continue;
+      if (!photo) {
+        this.reserved.delete(info.id);
+        continue;
+      }
       const fitted = drifterSize(photo, this.base, scale);
       const sprite = this.renderSprite(photo.source, fitted.w, fitted.h, this.s.depth ? dim : 0);
       photo.close();
@@ -249,6 +276,7 @@ export class FloatingScene implements SceneInstance {
 
   private release(d: Drifter) {
     sizeCanvas(d.sprite.surface, 1, 1);
+    this.reserved.delete(d.id);
   }
 
   /** Keep two photos decoded and ready so spawns are instant. */
@@ -313,9 +341,12 @@ export class FloatingScene implements SceneInstance {
     for (const d of this.drifters) g.drawImage(d.sprite.surface as CanvasImageSource, Math.round(d.x - d.sprite.w / 2), Math.round(d.y));
   }
 
-  /** Test hook. */
+  /** Test hooks. */
   get count() {
     return this.drifters.length;
+  }
+  get ids() {
+    return this.drifters.map((d) => d.id);
   }
 }
 
@@ -337,7 +368,7 @@ export const floating: SceneFormat<FloatingSettings> = {
       default: 22,
     },
     { key: 'density', label: 'Photos on screen', type: 'number', min: 3, max: 20, step: 1, default: 10 },
-    { key: 'sizePct', label: 'Photo size', type: 'number', min: 20, max: 60, step: 1, unit: '%', default: 36 },
+    { key: 'sizePct', label: 'Photo size', type: 'number', min: 20, max: 90, step: 1, unit: '%', default: 50 },
     {
       key: 'direction',
       label: 'Direction',

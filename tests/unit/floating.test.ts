@@ -146,9 +146,41 @@ describe('Floating scene', () => {
   });
 
   it('upward direction and flat depth work too', async () => {
+    // A 3-photo library shows 3 at a time (repeats allowed only for libraries this small).
     const h = harness({ direction: 'up', depth: false }, 3);
     await h.scene.start();
+    expect(h.scene.count).toBe(3);
     await h.advance(30_000, 100);
-    expect(h.statuses.length).toBeGreaterThan(5);
+    expect(h.statuses.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('spreads the initial photos across the screen (regression: all started at x = 0)', async () => {
+    const h = harness();
+    await h.scene.start();
+    const xs = (h.scene as unknown as { drifters: { x: number; sprite: { w: number } }[] }).drifters.map((d) => d.x);
+    expect(xs.length).toBe(8);
+    for (const x of xs) {
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(1920);
+    }
+    // Spread out, not clustered: they span at least half the width.
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(960);
+  });
+
+  it('never shows the same photo twice at once, even when the library is barely big enough', async () => {
+    const h = harness({ density: 10 }, 13);
+    await h.scene.start();
+    for (let second = 0; second < 90; second++) {
+      await h.advance(1000, 100);
+      const ids = h.scene.ids;
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+    expect(h.statuses.length).toBeGreaterThan(10); // still flowing
+  });
+
+  it('caps photos on screen below the library size', async () => {
+    const h = harness({ density: 20 }, 8);
+    await h.scene.start();
+    expect(h.scene.count).toBe(5); // 8 photos − 3 kept free for entering
   });
 });
