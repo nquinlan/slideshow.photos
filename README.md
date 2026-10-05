@@ -127,6 +127,9 @@ All processing is local. There are no analytics. Google code is loaded only afte
 ## Testing status
 
 - **Unit tests:** 47 passing (`npm test`).
-- **E2E (Playwright):** import, dedupe, metadata stripping (GPS, camera and date verified by parsing the stored bytes) and playback run in Chromium, Firefox and WebKit. Full-screen/Escape and offline run in Chromium only.
+- **E2E (Playwright):** 12/12 passing (2026-10-05). Covered:
+  - In Chromium, Firefox and WebKit: import, dedupe, EXIF orientation, metadata stripping (GPS, camera and date verified by parsing the stored bytes), and playback.
+  - In Chromium only: full-screen/Escape and offline.
 - **Offline in Firefox and Safari: check by hand.** Playwright supports service workers only in Chromium. Its offline mode either bypasses the worker (Firefox) or aborts the page load (WebKit, [microsoft/playwright#42775](https://github.com/microsoft/playwright/issues/42775)). To check: load `/app` once, wait for "Ready to work offline", go offline, reload.
-- **Not yet run:** the in-browser speed/memory benchmark (`npm run bench`) and Lighthouse.
+- **Benchmark:** sizes and speed measured in Chromium (`bench/RESULTS.md`). Memory is still to be measured.
+- **Not yet run:** Lighthouse, and the memory benchmark (`npm run bench -- --only=0`).
