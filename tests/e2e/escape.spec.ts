@@ -14,7 +14,7 @@ test('first Esc leaves full-screen and keeps playing; second Esc stops', async (
   await addPhotos(page, ALL);
   await expectPhotoCount(page, 5);
   // Short interval so we can observe auto-advance while windowed.
-  await page.getByLabel(/Show each photo for/).fill('2');
+  await page.getByLabel(/Show each (photo|layout) for/).fill('2');
 
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   const player = page.getByTestId('player');
