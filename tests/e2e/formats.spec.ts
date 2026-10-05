@@ -37,25 +37,34 @@ for (const format of ['Sliding Panels', 'Floating', 'Crossfade']) {
   });
 }
 
-// Regression for "small files are upscaled": a 240x160 photo must cover about its native
-// area of the stage (≈3.75% at 1280x800 and 1x; ≈0.94% at 2x), not the screen.
-for (const format of ['Sliding Panels', 'Crossfade']) {
-  test(`${format} never upscales a small photo`, async ({ page }) => {
-    await openApp(page);
-    await addPhotos(page, ['tiny-240x160.jpg']);
-    await expectPhotoCount(page, 1);
-    await page.getByLabel('Format').selectOption({ label: format });
-    // Crossfade's default blurred backdrop would light the whole screen; use black.
-    if (format === 'Crossfade') await page.getByLabel('Background').selectOption({ label: 'Black' });
-    await play(page, format);
-    await page.waitForTimeout(1500);
-    const stagePixels = await page.evaluate(() => {
-      const c = document.querySelector<HTMLCanvasElement>('.player-canvas')!;
-      return c.width * c.height;
-    });
-    const expected = (240 * 160) / stagePixels;
-    const lit = await litFraction(page);
-    expect(lit).toBeGreaterThan(expected * 0.6);
-    expect(lit).toBeLessThan(expected * 1.6);
+// Regression for "small files are upscaled": in Crossfade a 240x160 photo must cover about
+// its native area of the stage (≈3.75% at 1280x800 and 1x; ≈0.94% at 2x), not the screen.
+test('Crossfade never upscales a small photo', async ({ page }) => {
+  await openApp(page);
+  await addPhotos(page, ['tiny-240x160.jpg']);
+  await expectPhotoCount(page, 1);
+  await page.getByLabel('Format').selectOption({ label: 'Crossfade' });
+  // The default blurred backdrop would light the whole screen; use black.
+  await page.getByLabel('Background').selectOption({ label: 'Black' });
+  await play(page, 'Crossfade');
+  await page.waitForTimeout(1500);
+  const stagePixels = await page.evaluate(() => {
+    const c = document.querySelector<HTMLCanvasElement>('.player-canvas')!;
+    return c.width * c.height;
   });
-}
+  const expected = (240 * 160) / stagePixels;
+  const lit = await litFraction(page);
+  expect(lit).toBeGreaterThan(expected * 0.6);
+  expect(lit).toBeLessThan(expected * 1.6);
+});
+
+// Sliding Panels never leaves gaps: it picks photos big enough for each panel, and only when
+// nothing in the collection is big enough (here: one tiny photo) enlarges one to fill.
+test('Sliding Panels fills its panels even when the only photo is small', async ({ page }) => {
+  await openApp(page);
+  await addPhotos(page, ['tiny-240x160.jpg']);
+  await expectPhotoCount(page, 1);
+  await play(page, 'Sliding Panels');
+  await page.waitForTimeout(1500);
+  expect(await litFraction(page)).toBeGreaterThan(0.9);
+});
