@@ -29,7 +29,7 @@ access-control-expose-headers: Content-Length
 ## Run the spike (about 5 minutes)
 
 1. Create an OAuth client. The steps are in the main README under "Google Cloud setup". Add `http://localhost:5173` as an Authorized JavaScript origin.
-2. Run `npm run spike` and open http://localhost:5173/google-picker.html.
+2. Run `npm run spike` and open http://localhost:5173/. Use `localhost`, not a network address; Google only allows plain http for localhost origins.
 3. Paste the client ID, then work through the steps: **Sign in**, then **Create session & open picker**. Pick one or two photos and tap Done. Then click **Test downloads**.
 4. The table shows which strategies work:
    - **A.** Fetch with an `Authorization` header (documented)
