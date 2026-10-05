@@ -40,7 +40,7 @@ Requires Node 22+.
    - **Authorized redirect URIs:** none needed. The token model uses a popup.
 5. Copy the **Client ID**, not the secret, into `.env.local` as `PUBLIC_GOOGLE_CLIENT_ID=...`, then rebuild. Never put the client secret anywhere in this project; the token flow doesn't use one.
 
-**What users are asked for:** the single read-only scope above. It only covers items the user picks in Google's picker. Tokens last about 1 hour, are kept in memory only, and can't be silently refreshed without a backend. Imports are therefore bounded sessions: the app shows the time left, pauses if access expires, and offers "Sign in and resume".
+**What users are asked for:** the single read-only scope above. It only covers items the user picks in Google's picker. Tokens last about 1 hour, are kept in memory only, and can't be silently refreshed without a backend. If access expires mid-import, the import pauses and offers "Sign in and resume". There is no countdown; it only matters if an import runs that long.
 
 ### Google Photos download works browser-only
 

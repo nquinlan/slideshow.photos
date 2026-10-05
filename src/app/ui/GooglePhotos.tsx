@@ -30,22 +30,18 @@ type Phase =
   | { kind: 'listing' }
   | { kind: 'error'; message: string };
 
-/** baseUrls stay valid for 60 minutes after they are listed. */
-const BASE_URL_TTL = 60 * 60_000;
 
 /**
  * "Add from Google Photos": one bounded session per import.
  * sign in → pick in Google Photos (new window) → download sized renditions →
- * same local pipeline as files. Shows the time left on the Google access
- * token, and offers to resume with a fresh sign-in if it runs out mid-import.
+ * same local pipeline as files. If access expires mid-import (tokens last
+ * about an hour), it pauses and offers to resume with a fresh sign-in.
  */
 export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
   const descId = useId();
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [token, setToken] = useState<GoogleToken>();
   const tokenRef = useRef<GoogleToken>(undefined);
-  const [listedAt, setListedAt] = useState<number>();
-  const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState<string>();
   const [paused, setPaused] = useState<ImportProgress & { label: string }>();
   const abortRef = useRef<AbortController>(undefined);
@@ -54,13 +50,6 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
   tokenRef.current = token;
   const configured = !!GOOGLE_CLIENT_ID;
   const disabled = !online || !configured || phase.kind === 'auth' || phase.kind === 'creating' || phase.kind === 'listing';
-
-  // Countdown tick while we hold a token.
-  useEffect(() => {
-    if (!token) return;
-    const t = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(t);
-  }, [token]);
 
   // Watch for Google imports that paused because access expired.
   useEffect(
@@ -114,7 +103,6 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
         ? `${skipped} video${skipped === 1 ? '' : 's'} skipped — slideshows use photos only.`
         : undefined,
     );
-    setListedAt(Date.now());
     if (!photos.length) return;
     onItems(itemsFrom(photos), {
       lanes: 6,
@@ -198,13 +186,7 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
   async function disconnect() {
     await revokeToken(token);
     setToken(undefined);
-    setListedAt(undefined);
   }
-
-  const tokenLeft = token ? token.expiresAt - now : 0;
-  const urlLeft = listedAt ? listedAt + BASE_URL_TTL - now : Infinity;
-  const left = Math.min(tokenLeft, urlLeft);
-  const minutes = Math.max(0, Math.floor(left / 60_000));
 
   const reason = !online
     ? 'Google Photos needs an internet connection. Your library and slideshows still work offline.'
@@ -266,12 +248,10 @@ export function GooglePhotosImport({ online, collectionId, onItems }: Props) {
               </button>
             </div>
           )}
-          {token && left > 0 && (
-            <p className={`muted${minutes < 10 ? ' warn-text' : ''}`}>
-              Google access: about {minutes} min left.{' '}
-              {minutes < 10 && 'If it runs out mid-import, you can resume after signing in again. '}
+          {token && (
+            <p className="muted">
               <button type="button" className="link" onClick={() => void disconnect()}>
-                Disconnect
+                Disconnect Google
               </button>
             </p>
           )}
