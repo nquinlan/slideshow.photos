@@ -40,7 +40,7 @@ import { toPhotoInfo } from '../player/photos';
 import { GooglePhotosImport } from './GooglePhotos';
 import { BackupPanel } from './BackupPanel';
 import { GraphicsPanel } from './GraphicsPanel';
-import { useOnline, useStorageInfo } from './hooks';
+import { useHeightVar, useOnline, useStorageInfo } from './hooks';
 import { ImportConfirmDialog, ImportPanel, InterruptedJobs, StorageMeter, type PendingImport } from './ImportUI';
 import { Library } from './Library';
 import { LibrarySettings } from './LibrarySettings';
@@ -73,6 +73,8 @@ export default function App() {
   const [graphics, setGraphics] = useState<Graphic[]>([]);
   const reloadGraphics = useCallback(async () => setGraphics(await listGraphics()), []);
   const storage = useStorageInfo(dataVersion);
+  const headerRef = useHeightVar('--header-h');
+  const toolbarRef = useHeightVar('--toolbar-h');
   const playerRef = useRef<PlayerHandle>(null);
   // Imports need the current collection, which loads asynchronously from IndexedDB at
   // startup. Until then the add controls are disabled so a selection is never dropped.
@@ -292,7 +294,7 @@ export default function App() {
       <a className="skip-link" href="#library">
         Skip to photos
       </a>
-      <header className="app-header">
+      <header className="app-header" ref={headerRef}>
         <a href="/" className="brand" aria-label={`${SITE.name} home`}>
           <img src="/favicon.svg" alt="" width="24" height="24" />
           <span>{SITE.name}</span>
@@ -389,7 +391,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="toolbar" role="toolbar" aria-label="Add and manage photos">
+          <div className="toolbar" role="toolbar" aria-label="Add and manage photos" ref={toolbarRef}>
             <button type="button" className="btn" onClick={() => void addFiles('files')} disabled={!canImport}>
               Add photos
             </button>

@@ -22,6 +22,10 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Keep keyboard-focused thumbnails clear of the sticky header and toolbar. */
+  scroll-padding-top: calc(var(--header-h, 3.5rem) + var(--toolbar-h, 3rem));
+}
 html,
 body {
   margin: 0;
@@ -238,8 +242,12 @@ input[type='radio'] {
 }
 .app-side {
   position: sticky;
-  top: 4.5rem;
+  top: calc(var(--header-h, 3.5rem) + 1rem);
   align-self: start;
+  /* Taller settings (e.g. Logos & graphics) scroll inside the sidebar instead of running off screen. */
+  max-height: calc(100dvh - var(--header-h, 3.5rem) - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -263,9 +271,19 @@ input[type='radio'] {
   .app-side {
     position: static;
     order: -1;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 
+.toolbar {
+  /* Stays under the header so selection actions (Clear, Remove) remain reachable while scrolling. */
+  position: sticky;
+  top: var(--header-h, 3.5rem);
+  z-index: 5;
+  padding: 0.5rem 0;
+  background: var(--bg);
+}
 .collection-head,
 .toolbar {
   display: flex;
