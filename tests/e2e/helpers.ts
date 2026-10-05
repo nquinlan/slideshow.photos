@@ -6,8 +6,9 @@ export const fixture = (...names: string[]) => names.map((n) => path.join(FIXTUR
 export const ALL = ['sunset.jpg', 'ocean.jpg', 'forest.jpg', 'night.png', 'rotated-exif6.jpg'];
 
 /**
- * Force the <input type=file> fallback: Playwright can't drive the native
- * File System Access picker, but it can answer a file chooser.
+ * Force the <input type=file> / download fallbacks: Playwright can't drive the
+ * native File System Access pickers, but it can answer file choosers and
+ * capture downloads.
  */
 export async function useInputFallback(page: Page) {
   await page.addInitScript(() => {
@@ -15,6 +16,8 @@ export async function useInputFallback(page: Page) {
     delete window.showOpenFilePicker;
     // @ts-expect-error test-only override
     delete window.showDirectoryPicker;
+    // @ts-expect-error test-only override (exports fall back to a download Playwright can capture)
+    delete window.showSaveFilePicker;
   });
 }
 

@@ -124,6 +124,24 @@ Under **Logos & graphics** in the sidebar you can upload PNG or SVG files (up to
   - **Full screen** (e.g. a ready-made sponsor slide): it takes the whole screen. In Floating the drift pauses while it fades in, holds for the interval, and fades out.
 - **Corner logo** (per collection): one graphic stays on screen over every format. You choose the corner, size, opacity and an optional plate in its colour.
 
+### Moving a library to another computer
+
+**Settings → Move to another computer.**
+
+- **Export** saves the chosen slideshows to a `.zip`, with an estimated size shown first. It contains:
+  - `manifest.json` with slideshow settings, order, and photo and graphic details;
+  - the stored photo copies and thumbnails;
+  - the graphics, byte-for-byte;
+  - kept originals, if you choose to include them.
+
+  In Chrome and Edge it streams straight to the file you choose; other browsers build the file, then download it. Zip64 is used, so exports over 4 GB work.
+- **Import** shows what's inside first: the slideshows, how many photos are new to this computer, and the storage needed. Then it adds them:
+  - Photos already on the device are reused rather than duplicated, and graphics are matched by their exact bytes.
+  - Slideshows are added as new collections in their original order, renamed if the name is taken.
+  - The file is treated as untrusted: only listed paths are read and every setting is validated.
+  - If the import fails or is cancelled, everything it added is removed.
+  - Device settings such as import quality aren't changed.
+
 ### Adding a slideshow format
 
 Implement `SlideshowFormat` in `src/app/formats/types.ts` as one of two kinds:

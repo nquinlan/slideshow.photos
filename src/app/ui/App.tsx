@@ -38,6 +38,7 @@ import type { PhotoInfo } from '../formats/types';
 import { enterFullscreen } from '../player/fullscreen';
 import { toPhotoInfo } from '../player/photos';
 import { GooglePhotosImport } from './GooglePhotos';
+import { BackupPanel } from './BackupPanel';
 import { GraphicsPanel } from './GraphicsPanel';
 import { useOnline, useStorageInfo } from './hooks';
 import { ImportConfirmDialog, ImportPanel, InterruptedJobs, StorageMeter, type PendingImport } from './ImportUI';
@@ -347,6 +348,16 @@ export default function App() {
             onDeleteOriginals={() => {
               if (confirm('Delete all kept original files? Slideshow copies are not affected.'))
                 void deleteAllOriginals().then(refresh);
+            }}
+          />
+          <h3 className="field-title section-title">Move to another computer</h3>
+          <BackupPanel
+            collections={collections}
+            usage={usage}
+            onImported={async (r) => {
+              await reloadGraphics();
+              await refresh();
+              if (r.collections[0]) await switchCollection(r.collections[0].id);
             }}
           />
         </section>
