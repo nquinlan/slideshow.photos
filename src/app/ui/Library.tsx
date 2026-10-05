@@ -1,6 +1,7 @@
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Photo } from '../db/db';
+import { PhotoPreview } from './PhotoPreview';
 import { thumbUrl } from './thumbs';
 
 interface Props {
@@ -16,14 +17,16 @@ const GAP = 6;
 /**
  * Virtualized thumbnail grid (rows are windowed against page scroll), so a
  * 5,000-photo collection renders only the ~10 rows in view. Each tile is a
- * real checkbox for selection (keyboard + screen-reader friendly) plus a
- * "play from here" button. Shift-click selects a range.
+ * real checkbox for selection (keyboard + screen-reader friendly) plus an
+ * expand button that opens a larger preview. Shift-click selects a range.
  */
 export function Library({ photos, selected, onSelectionChange, onPlayFrom }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const [offset, setOffset] = useState(0);
   const lastClicked = useRef<number>(-1);
+  const [previewId, setPreviewId] = useState<string>();
+  const previewIndex = previewId ? photos.findIndex((p) => p.id === previewId) : -1;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -62,34 +65,61 @@ export function Library({ photos, selected, onSelectionChange, onPlayFrom }: Pro
     onSelectionChange(next);
   };
 
+  /** Close the preview, bringing the photo it ended on into view and focusing its expand button. */
+  const closePreview = () => {
+    const id = previewId;
+    setPreviewId(undefined);
+    if (previewIndex < 0) return;
+    virtualizer.scrollToIndex(Math.floor(previewIndex / cols), { align: 'auto' });
+    requestAnimationFrame(() =>
+      ref.current?.querySelector<HTMLButtonElement>(`[data-photo-id="${CSS.escape(id!)}"] .tile-expand`)?.focus(),
+    );
+  };
+
   return (
-    <div ref={ref} className="library" style={{ height: virtualizer.getTotalSize() }} role="list" aria-label="Photos">
-      {virtualizer.getVirtualItems().map((row) => (
-        <div
-          key={row.key}
-          className="library-row"
-          style={{
-            transform: `translateY(${row.start - virtualizer.options.scrollMargin}px)`,
-            gridTemplateColumns: `repeat(${cols}, ${tile}px)`,
-            gap: GAP,
+    <>
+      <div ref={ref} className="library" style={{ height: virtualizer.getTotalSize() }} role="list" aria-label="Photos">
+        {virtualizer.getVirtualItems().map((row) => (
+          <div
+            key={row.key}
+            className="library-row"
+            style={{
+              transform: `translateY(${row.start - virtualizer.options.scrollMargin}px)`,
+              gridTemplateColumns: `repeat(${cols}, ${tile}px)`,
+              gap: GAP,
+            }}
+          >
+            {photos.slice(row.index * cols, row.index * cols + cols).map((p, i) => {
+              const index = row.index * cols + i;
+              return (
+                <Tile
+                  key={p.id}
+                  photo={p}
+                  size={tile}
+                  checked={selected.has(p.id)}
+                  onToggle={(shift) => toggle(index, shift)}
+                  onExpand={() => setPreviewId(p.id)}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {previewIndex >= 0 && (
+        <PhotoPreview
+          photos={photos}
+          index={previewIndex}
+          selected={selected.has(photos[previewIndex].id)}
+          onToggle={() => toggle(previewIndex, false)}
+          onNavigate={(i) => setPreviewId(photos[i].id)}
+          onPlayFrom={() => {
+            setPreviewId(undefined);
+            onPlayFrom(photos[previewIndex].id);
           }}
-        >
-          {photos.slice(row.index * cols, row.index * cols + cols).map((p, i) => {
-            const index = row.index * cols + i;
-            return (
-              <Tile
-                key={p.id}
-                photo={p}
-                size={tile}
-                checked={selected.has(p.id)}
-                onToggle={(shift) => toggle(index, shift)}
-                onPlay={() => onPlayFrom(p.id)}
-              />
-            );
-          })}
-        </div>
-      ))}
-    </div>
+          onClose={closePreview}
+        />
+      )}
+    </>
   );
 }
 
@@ -98,13 +128,13 @@ const Tile = memo(function Tile({
   size,
   checked,
   onToggle,
-  onPlay,
+  onExpand,
 }: {
   photo: Photo;
   size: number;
   checked: boolean;
   onToggle(shift: boolean): void;
-  onPlay(): void;
+  onExpand(): void;
 }) {
   const [src, setSrc] = useState<string>();
   useEffect(() => {
@@ -117,7 +147,12 @@ const Tile = memo(function Tile({
 
   const label = photo.name || 'Photo';
   return (
-    <div className={`tile${checked ? ' is-selected' : ''}`} role="listitem" style={{ width: size, height: size }}>
+    <div
+      className={`tile${checked ? ' is-selected' : ''}`}
+      role="listitem"
+      style={{ width: size, height: size }}
+      data-photo-id={photo.id}
+    >
       <label className="tile-select" title={label}>
         <input
           type="checkbox"
@@ -134,9 +169,9 @@ const Tile = memo(function Tile({
         )}
         <span className="tile-check" aria-hidden="true" />
       </label>
-      <button type="button" className="tile-play" onClick={onPlay} aria-label={`Play slideshow from ${label}`} title="Play from here">
+      <button type="button" className="tile-expand" onClick={onExpand} aria-label={`Preview ${label}`} title="Preview larger">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 5v14l11-7z" />
+          <path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z" />
         </svg>
       </button>
     </div>

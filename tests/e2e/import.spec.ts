@@ -123,3 +123,33 @@ test('add from Google Photos is disabled with an explanation when offline', asyn
   await context.setOffline(false);
   await expect(page.getByTestId('net-status')).toHaveText(/Online/);
 });
+
+test('the expand button previews a photo larger and keeps selection', async ({ page }) => {
+  await openApp(page);
+  await addPhotos(page, ALL);
+  await expectPhotoCount(page, 5);
+
+  await page.getByRole('img', { name: 'sunset.jpg' }).hover();
+  await page.getByRole('button', { name: 'Preview sunset.jpg' }).click();
+  const preview = page.getByTestId('photo-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('of 5');
+  // The slideshow copy, not the 320px thumbnail.
+  await expect
+    .poll(() => preview.getByRole('img', { name: 'sunset.jpg' }).evaluate((i: HTMLImageElement) => i.naturalWidth))
+    .toBeGreaterThan(320);
+
+  await preview.getByRole('checkbox', { name: 'Select sunset.jpg' }).check();
+  await expect(preview.getByText('Selected', { exact: true })).toBeVisible();
+
+  // Arrow keys step to a neighbouring photo, with its own selection state.
+  const atEnd = await preview.getByRole('button', { name: 'Next photo' }).isDisabled();
+  await page.keyboard.press(atEnd ? 'ArrowLeft' : 'ArrowRight');
+  await expect(preview.getByRole('img', { name: 'sunset.jpg' })).toHaveCount(0);
+  await expect(preview.getByRole('checkbox')).not.toBeChecked();
+
+  await page.keyboard.press('Escape');
+  await expect(preview).toBeHidden();
+  await expect(page.getByText('1 selected')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Select sunset.jpg' })).toBeChecked();
+});
