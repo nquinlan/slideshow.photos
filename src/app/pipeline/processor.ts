@@ -13,6 +13,7 @@
  *  4. Draw to a canvas and re-encode (WebP if the encoder exists, else
  *     JPEG). Re-encoding from pixels drops *all* metadata, including GPS.
  */
+import { encodeAs } from './encode';
 import { readImageMeta } from './meta';
 import { fitLongEdge, orientedSize, THUMB_LONG_EDGE } from './sizing';
 import type { OutputFormat, ProcessOptions, ProcessResult } from './types';
@@ -141,11 +142,11 @@ export async function processImage(blob: Blob, opts: ProcessOptions): Promise<Pr
   const decodeMs = performance.now() - tDec;
 
   const tEnc = performance.now();
-  const format: OutputFormat = opts.format ?? (caps.webp ? 'webp' : 'jpeg');
-  const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
+  const preferred: OutputFormat = opts.format ?? (caps.webp ? 'webp' : 'jpeg');
   const target = fitLongEdge(srcW, srcH, opts.cap);
 
   let display: Blob;
+  let format: OutputFormat = preferred;
   let thumb: Blob;
   let thumbSize: { width: number; height: number };
   try {
@@ -155,7 +156,9 @@ export async function processImage(blob: Blob, opts: ProcessOptions): Promise<Pr
     ctx.imageSmoothingQuality = 'high';
     drawOriented(ctx, bitmap, manualOrientation, target.width, target.height);
     bitmap.close();
-    display = await encodeCanvas(canvas, mime, opts.quality);
+    const encoded = await encodeAs((type, q) => encodeCanvas(canvas, type, q), preferred, opts.quality);
+    display = encoded.blob;
+    format = encoded.format;
 
     thumbSize = fitLongEdge(target.width, target.height, THUMB_LONG_EDGE);
     const tc = makeCanvas(thumbSize.width, thumbSize.height);
@@ -163,7 +166,8 @@ export async function processImage(blob: Blob, opts: ProcessOptions): Promise<Pr
     tctx.imageSmoothingEnabled = true;
     tctx.imageSmoothingQuality = 'high';
     tctx.drawImage(canvas as CanvasImageSource, 0, 0, thumbSize.width, thumbSize.height);
-    thumb = await encodeCanvas(tc, mime, 0.78);
+    // Same format as the display copy (known to work by now).
+    thumb = (await encodeAs((type, q) => encodeCanvas(tc, type, q), format, 0.78)).blob;
     releaseCanvas(canvas);
     releaseCanvas(tc);
   } catch (e) {
@@ -178,7 +182,7 @@ export async function processImage(blob: Blob, opts: ProcessOptions): Promise<Pr
     thumbWidth: thumbSize.width,
     thumbHeight: thumbSize.height,
     contentHash: await hashP,
-    format: display.type === 'image/webp' ? 'webp' : 'jpeg',
+    format,
     sourceWidth: srcW,
     sourceHeight: srcH,
     takenAt,
