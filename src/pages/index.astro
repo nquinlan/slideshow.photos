@@ -120,7 +120,7 @@ const faqLd = {
   })),
 };
 
-// Escape "<" so JSON can never close the <script> element.
+// Escape "<" so the JSON can never end its inline script element early.
 const ld = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
 
 // ---- Hero illustration: a Sliding Panels collage on black, two panels mid-slide.
