@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS, effectiveFormat, getFormat } from '../../src/app/formats';
 import { slidingPanels } from '../../src/app/formats/slidingPanels';
-import { animate, drawGraphic, fitRect, stageSize, type Scheduler } from '../../src/app/formats/shared';
+import { animate, clearOf, drawGraphic, fitRect, stageSize, type Scheduler } from '../../src/app/formats/shared';
 import { resolveSettings } from '../../src/app/formats/types';
 import { toPhotoInfo } from '../../src/app/player/photos';
 
@@ -109,5 +109,37 @@ describe('shared helpers', () => {
     ac.abort();
     await p2;
     expect(seen2.at(-1)).toBe(1);
+  });
+});
+
+describe('keeping graphics clear of the corner logo', () => {
+  const space = { x: 0, y: 0, w: 1000, h: 1000 };
+
+  it('leaves a graphic alone when there is no logo or it does not overlap', () => {
+    const r = { x: 300, y: 450, w: 400, h: 100 };
+    expect(clearOf(r, space, null)).toBe(r);
+    expect(clearOf(r, space, { x: 700, y: 900, w: 300, h: 100 })).toBe(r);
+  });
+
+  it('moves a graphic the shortest way out when it still fits at full size', () => {
+    // Left of the logo needs a 100px move; above it would need 150px.
+    expect(clearOf({ x: 300, y: 450, w: 400, h: 100 }, space, { x: 600, y: 400, w: 400, h: 600 })).toEqual({ x: 200, y: 450, w: 400, h: 100 });
+  });
+
+  it('shrinks it only as much as needed, choosing the side where it stays largest', () => {
+    // A 1000×250 graphic; left of the logo it could be 70% size, above it 80%.
+    expect(clearOf({ x: 0, y: 375, w: 1000, h: 250 }, space, { x: 700, y: 200, w: 300, h: 800 })).toEqual({ x: 100, y: 0, w: 800, h: 200 });
+  });
+
+  it('drawGraphic places the graphic clear of the logo, then applies the sliding shift', () => {
+    const draws: number[][] = [];
+    const ctx = {
+      fillRect: () => undefined,
+      drawImage: (_s: unknown, ...a: number[]) => draws.push(a),
+    } as unknown as CanvasRenderingContext2D;
+    const graphic = { id: 'g', width: 400, height: 100, kind: 'raster' as const, background: '#fff', scalePct: 50, fullScreen: false };
+    const img = { source: {} as CanvasImageSource, width: 400, height: 100, maxScale: 1, graphic };
+    drawGraphic(ctx, img, space, 10, 0, { x: 600, y: 400, w: 400, h: 600 });
+    expect(draws).toEqual([[210, 450, 400, 100]]);
   });
 });

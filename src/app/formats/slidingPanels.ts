@@ -14,11 +14,12 @@
  * and at most three layouts are held: the one on screen, the preloaded next
  * one, and briefly the outgoing one.
  */
-import { animate, ctx2d, rafScheduler, sizeCanvas, stageSize, type Scheduler } from './shared';
+import { animate, clearOf, ctx2d, fitRect, keepOutPixels, rafScheduler, sizeCanvas, stageSize, type Scheduler } from './shared';
 import { generateLayout, maxTilesFor, type Rect } from './panels/layout';
 import { assignPhotos } from './panels/match';
 import { drawPanel, motionsFor, type Motion } from './panels/motion';
 import type {
+  Box,
   FormatSettings,
   LoadedPhoto,
   RenderOptions,
@@ -53,12 +54,16 @@ interface Plan {
   items: PlanItem[];
 }
 
-/** The tile where a graphic shows largest when contained (graphics are never cropped). */
-export function bestTileForGraphic(tiles: Rect[], g: { width: number; height: number }): number {
+/**
+ * The tile where a graphic shows largest when contained (graphics are never
+ * cropped), after making room for the corner logo (`keepOut`, px).
+ */
+export function bestTileForGraphic(tiles: Rect[], g: { width: number; height: number }, keepOut?: Box): number {
   let best = 0;
   let bestScale = -1;
   tiles.forEach((t, i) => {
-    const scale = Math.min(t.w / g.width, t.h / g.height);
+    const r = fitRect(g.width, g.height, t.w, t.h, 'contain');
+    const scale = clearOf({ x: t.x + r.x, y: t.y + r.y, w: r.w, h: r.h }, t, keepOut).w / g.width;
     if (scale > bestScale) {
       best = i;
       bestScale = scale;
@@ -166,7 +171,9 @@ export class SlidingPanelsScene implements SceneInstance {
   }
 
   setRenderOptions(render: RenderOptions) {
-    this.c.render = render; // panels always crop to fill on black; nothing to redraw
+    // Panels always crop to fill on black; only the corner logo's area matters (graphics avoid it).
+    this.c.render = render;
+    if (!this.transitioning && this.current) this.drawFrame(this.current, 'in', 1);
   }
 
   setTiming(t: SceneTiming) {
@@ -257,7 +264,7 @@ export class SlidingPanelsScene implements SceneInstance {
       fullBleedChance: graphic ? 0 : (FULL_BLEED_CHANCE[this.s.fullScreen] ?? 0.15),
       random: this.c.random,
     });
-    const graphicTile = graphic ? bestTileForGraphic(tiles, graphic) : -1;
+    const graphicTile = graphic ? bestTileForGraphic(tiles, graphic, keepOutPixels(this.c.render.keepOut, W, H)) : -1;
     const photoTiles = tiles.filter((_, i) => i !== graphicTile);
     // Avoid photos from the current and previous layout when the library allows.
     const avoid = new Set<string>();
@@ -353,7 +360,9 @@ export class SlidingPanelsScene implements SceneInstance {
     const tiles = this.pixelTiles(f.plan);
     const motions = phase === 'out' ? f.out : f.in;
     const seam = Math.max(2, Math.round((this.s.gutterPct / 100) * this.c.canvas.width)) * (1 - visible);
-    tiles.forEach((t, i) => drawPanel(this.ctx, f.photos[i], t, motions[i], visible, seam));
+    const { width: W, height: H } = this.c.canvas;
+    const keepOut = keepOutPixels(this.c.render.keepOut, W, H);
+    tiles.forEach((t, i) => drawPanel(this.ctx, f.photos[i], t, motions[i], visible, seam, keepOut));
   }
 
   private async transitionIn(f: Frame) {

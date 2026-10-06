@@ -8,7 +8,7 @@
  * and the bitmap released. Every frame is then one drawImage per photo,
  * which holds 60 fps with a dozen photos on screen. Motion is time-based.
  */
-import { createSurface, ctx2d, drawGraphic, rafScheduler, shuffledOrder, sizeCanvas, stageSize, type Scheduler, type Surface } from './shared';
+import { createSurface, ctx2d, drawGraphic, keepOutPixels, rafScheduler, shuffledOrder, sizeCanvas, stageSize, type Scheduler, type Surface } from './shared';
 import type {
   FormatSettings,
   LoadedPhoto,
@@ -435,7 +435,7 @@ export class FloatingScene implements SceneInstance {
     if (f) {
       const hold = this.holdSeconds;
       g.globalAlpha = f.t < FADE ? f.t / FADE : f.t > FADE + hold ? Math.max(0, 1 - (f.t - FADE - hold) / FADE) : 1;
-      drawGraphic(g, f.img, { x: 0, y: 0, w: W, h: H });
+      drawGraphic(g, f.img, { x: 0, y: 0, w: W, h: H }, 0, 0, keepOutPixels(this.c.render.keepOut, W, H));
       g.globalAlpha = 1;
     }
   }

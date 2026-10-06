@@ -1,10 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { PlaybackSettings } from '../db/db';
 import type { Graphic } from '../db/db';
 import { getDisplay, getGraphicFile } from '../db/repo';
 import { enabledGraphics } from '../graphics/graphics';
 import { CornerLogo } from './CornerLogo';
-import type { PhotoInfo } from '../formats/types';
+import type { Box, PhotoInfo } from '../formats/types';
 import { SlideshowEngine, type EngineState } from '../player/engine';
 import {
   EscapeController,
@@ -48,6 +48,13 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
 
   useImperativeHandle(ref, () => ({ element: rootRef.current }), []);
 
+  // Area the corner logo covers. It can be measured before the engine exists, so keep the latest.
+  const keepOutRef = useRef<Box | null>(null);
+  const onKeepOut = useCallback((area: Box | null) => {
+    keepOutRef.current = area;
+    engineRef.current?.setKeepOut(area);
+  }, []);
+
   // Engine lifecycle (photo list fixed for the life of the player).
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -58,6 +65,7 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
       settings,
       reducedMotion,
       startPhotoId,
+      keepOut: keepOutRef.current,
       viewport: { width: root.clientWidth || innerWidth, height: root.clientHeight || innerHeight, devicePixelRatio: devicePixelRatio || 1 },
       loadBlob: getDisplay,
       graphics: graphicItems,
@@ -225,7 +233,11 @@ export const Player = forwardRef<PlayerHandle, Props>(function Player({ photos, 
     >
       <canvas ref={canvasRef} className="player-canvas" aria-hidden="true" />
       {settings.graphics?.corner && (
-        <CornerLogo settings={settings.graphics.corner} graphic={graphics.find((g) => g.id === settings.graphics!.corner!.graphicId)} />
+        <CornerLogo
+          settings={settings.graphics.corner}
+          graphic={graphics.find((g) => g.id === settings.graphics!.corner!.graphicId)}
+          onKeepOut={onKeepOut}
+        />
       )}
       {state?.error && <p className="player-error">{state.error}</p>}
       {!state?.ready && !state?.error && <p className="player-loading">Loading…</p>}

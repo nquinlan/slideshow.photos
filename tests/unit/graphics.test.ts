@@ -7,6 +7,7 @@ import {
   GraphicFileError,
   GraphicScheduler,
   MAX_TOTAL_SHARE,
+  cornerKeepOut,
   enabledGraphics,
   inspectGraphicFile,
   svgRenderCopy,
@@ -168,5 +169,21 @@ describe('graphic share scheduling', () => {
     expect(items.map((i) => i.info.id)).toEqual(['a', 'b']);
     expect(items.reduce((t, i) => t + i.share, 0)).toBeCloseTo(MAX_TOTAL_SHARE);
     expect(enabledGraphics([g('a')], undefined)).toEqual([]);
+  });
+});
+
+describe('corner logo keep-out area', () => {
+  it('grows the logo by its 2.5vmin margin and stretches it to its corner, as fractions of the stage', () => {
+    const stage = { width: 1000, height: 500 }; // margin 12.5px
+    const br = cornerKeepOut({ x: 800, y: 420, w: 180, h: 60 }, stage)!;
+    expect(br.x).toBeCloseTo(0.7875);
+    expect(br.y).toBeCloseTo(0.815);
+    expect(br.x + br.w).toBeCloseTo(1);
+    expect(br.y + br.h).toBeCloseTo(1);
+    expect(cornerKeepOut({ x: 12.5, y: 12.5, w: 100, h: 50 }, stage)).toEqual({ x: 0, y: 0, w: 0.125, h: 0.15 });
+  });
+
+  it('is empty before the logo has a size', () => {
+    expect(cornerKeepOut({ x: 0, y: 0, w: 0, h: 0 }, { width: 1000, height: 500 })).toBeNull();
   });
 });

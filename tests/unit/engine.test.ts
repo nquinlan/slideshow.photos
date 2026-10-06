@@ -3,6 +3,7 @@ import { DEFAULT_PLAYBACK, type PlaybackSettings } from '../../src/app/db/db';
 import { FORMATS } from '../../src/app/formats';
 import type {
   FormatInstance,
+  RenderOptions,
   LoadedPhoto,
   SceneContext,
   SceneFormat,
@@ -14,6 +15,7 @@ import { SlideshowEngine, shuffledOrder, type EngineState } from '../../src/app/
 
 /** A recording format registered at runtime — no core changes needed to add one. */
 const log: string[] = [];
+let lastRender: RenderOptions | undefined;
 const recorder: TransitionFormat = {
   kind: 'transition',
   uses: { interval: 'Interval', transition: true, shuffle: true, fit: true, backdrop: true },
@@ -25,7 +27,10 @@ const recorder: TransitionFormat = {
     init: (img: SlideImage) => void log.push(`init:${(img.source as unknown as { id: string }).id}:${settings.speed}`),
     transition: async (img: SlideImage, ms: number) => void log.push(`to:${(img.source as unknown as { id: string }).id}:${ms}`),
     resize: () => void log.push('resize'),
-    setRenderOptions: () => void log.push('render'),
+    setRenderOptions: (r: RenderOptions) => {
+      lastRender = r;
+      log.push('render');
+    },
     destroy: () => void log.push('destroy'),
   }),
 };
@@ -133,6 +138,21 @@ describe('SlideshowEngine', () => {
     engine.updateSettings({ ...settings, formatSettings: { 'test-recorder': { speed: 3 } } });
     expect(log).toContain('destroy');
     expect(log).toContain('init:a:3');
+  });
+
+  it('passes the corner logo area to the format once per change, and keeps it across settings changes', async () => {
+    const { engine, settings } = setup(['a', 'b']);
+    await engine.start();
+    log.length = 0;
+    const area = { x: 0.8, y: 0.85, w: 0.2, h: 0.15 };
+    engine.setKeepOut(area);
+    engine.setKeepOut({ ...area });
+    expect(log).toEqual(['render']);
+    expect(lastRender?.keepOut).toEqual(area);
+    engine.updateSettings({ ...settings, fit: 'cover' });
+    expect(lastRender).toEqual({ fit: 'cover', backdrop: settings.backdrop, keepOut: area });
+    engine.setKeepOut(null);
+    expect(lastRender?.keepOut).toBeNull();
   });
 
   it('reports a clear error for empty collections', async () => {

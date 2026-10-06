@@ -403,4 +403,13 @@ describe('Sliding Panels scene cycle', () => {
     ];
     expect(bestTileForGraphic(tiles, { width: 400, height: 100 })).toBe(1);
   });
+
+  it('bestTileForGraphic avoids a tile mostly covered by the corner logo', () => {
+    const tiles: Rect[] = [
+      { x: 0, y: 0, w: 1200, h: 400 },
+      { x: 0, y: 500, w: 1200, h: 400 },
+    ];
+    expect(bestTileForGraphic(tiles, { width: 400, height: 100 })).toBe(0);
+    expect(bestTileForGraphic(tiles, { width: 400, height: 100 }, { x: 300, y: 0, w: 900, h: 350 })).toBe(1);
+  });
 });

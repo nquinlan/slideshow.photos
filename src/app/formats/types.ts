@@ -51,9 +51,22 @@ export interface Viewport {
   devicePixelRatio: number;
 }
 
+/** Axis-aligned box; x/y is the top-left corner. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface RenderOptions {
   fit: Fit;
   backdrop: Backdrop;
+  /**
+   * Area the corner logo covers, as fractions of the viewport (0..1).
+   * Graphics are moved or shrunk to stay clear of it; photos ignore it.
+   */
+  keepOut?: Box | null;
 }
 
 /** Anything drawable with known intrinsic size (normally a decoded ImageBitmap). */

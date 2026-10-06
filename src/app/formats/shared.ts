@@ -2,7 +2,7 @@
  * Helpers shared by formats: slide composition (fit + backdrop), canvas
  * sizing, easing, and a rAF animation driver.
  */
-import type { RenderOptions, SlideImage, Viewport } from './types';
+import type { Box, RenderOptions, SlideImage, Viewport } from './types';
 
 /** Max backing-store size for the stage canvas; beyond 4K the GPU cost isn't visible. */
 const MAX_STAGE_PIXELS = 3840 * 2160;
@@ -54,26 +54,80 @@ export function fitRect(iw: number, ih: number, w: number, h: number, mode: 'con
   return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh };
 }
 
+const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Move `r` (a graphic drawn inside `space`), shrinking it only if it must, so
+ * it no longer overlaps `keepOut` (the corner logo). Two boxes are apart only
+ * if one lies wholly to one side of the other, so the graphic goes in
+ * whichever strip of `space` left of, right of, above or below the keep-out
+ * area lets it stay largest, as near as possible to where it was. Returned
+ * unchanged if it doesn't overlap, or if no strip has any room.
+ */
+export function clearOf(r: Box, space: Box, keepOut?: Box | null): Box {
+  if (!keepOut || !overlaps(r, keepOut)) return r;
+  const right = space.x + space.w;
+  const bottom = space.y + space.h;
+  const kRight = keepOut.x + keepOut.w;
+  const kBottom = keepOut.y + keepOut.h;
+  const strips: Box[] = [
+    { x: space.x, y: space.y, w: keepOut.x - space.x, h: space.h },
+    { x: kRight, y: space.y, w: right - kRight, h: space.h },
+    { x: space.x, y: space.y, w: space.w, h: keepOut.y - space.y },
+    { x: space.x, y: kBottom, w: space.w, h: bottom - kBottom },
+  ];
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  let best = r;
+  let bestK = 0;
+  let bestDist = Infinity;
+  for (const s of strips) {
+    if (s.w <= 0 || s.h <= 0) continue;
+    const k = Math.min(1, s.w / r.w, s.h / r.h);
+    const w = r.w * k;
+    const h = r.h * k;
+    const x = clamp(cx - w / 2, s.x, s.x + s.w - w);
+    const y = clamp(cy - h / 2, s.y, s.y + s.h - h);
+    const dist = Math.hypot(x + w / 2 - cx, y + h / 2 - cy);
+    if (k > bestK + 1e-9 || (k > bestK - 1e-9 && dist < bestDist)) {
+      best = { x, y, w, h };
+      bestK = k;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+/** A keep-out area given as fractions of the stage, in stage pixels. */
+export function keepOutPixels(area: Box | null | undefined, W: number, H: number): Box | undefined {
+  return area ? { x: area.x * W, y: area.y * H, w: area.w * W, h: area.h * H } : undefined;
+}
+
 /**
  * Draw a graphic whole inside `rect` on its background colour: contained at
  * its size-within-space, centred, never cropped; PNGs never enlarged past
  * native size (via maxScale). `ox`/`oy` shift the whole panel (sliding).
+ * `keepOut` (same coordinates as `rect`, before the shift) is the corner
+ * logo: the graphic moves, or shrinks, to stay clear of it.
  */
 export function drawGraphic(
   ctx: CanvasRenderingContext2D,
   img: SlideImage,
-  rect: { x: number; y: number; w: number; h: number },
+  rect: Box,
   ox = 0,
   oy = 0,
+  keepOut?: Box | null,
 ) {
   const g = img.graphic!;
   ctx.fillStyle = g.background;
   ctx.fillRect(rect.x + ox, rect.y + oy, rect.w, rect.h);
   const k = Math.max(0.05, Math.min(1, g.scalePct / 100));
-  const r = fitRect(img.width, img.height, rect.w * k, rect.h * k, 'contain', img.maxScale);
+  const fit = fitRect(img.width, img.height, rect.w * k, rect.h * k, 'contain', img.maxScale);
+  const r = clearOf({ x: rect.x + (rect.w - fit.w) / 2, y: rect.y + (rect.h - fit.h) / 2, w: fit.w, h: fit.h }, rect, keepOut);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img.source, rect.x + (rect.w - r.w) / 2 + ox, rect.y + (rect.h - r.h) / 2 + oy, r.w, r.h);
+  ctx.drawImage(img.source, r.x + ox, r.y + oy, r.w, r.h);
 }
 
 let tinyCanvas: Surface | undefined;
@@ -90,7 +144,7 @@ export function composeSlide(target: Surface, img: SlideImage, render: RenderOpt
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
-  if (img.graphic) return drawGraphic(ctx, img, { x: 0, y: 0, w: W, h: H });
+  if (img.graphic) return drawGraphic(ctx, img, { x: 0, y: 0, w: W, h: H }, 0, 0, keepOutPixels(render.keepOut, W, H));
   const r = fitRect(img.width, img.height, W, H, render.fit, img.maxScale);
   const fillsStage = r.x <= 0.5 && r.y <= 0.5 && r.x + r.w >= W - 0.5 && r.y + r.h >= H - 0.5;
   if (render.backdrop === 'blur' && !fillsStage) drawBlurBackdrop(ctx, img, W, H);

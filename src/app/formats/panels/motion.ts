@@ -12,7 +12,7 @@
  * clipped to its own frame, so panels never overlap.
  */
 import { drawGraphic, fitRect } from '../shared';
-import type { SlideImage } from '../types';
+import type { Box, SlideImage } from '../types';
 import type { Rect } from './layout';
 
 export interface Motion {
@@ -40,6 +40,7 @@ export function motionsFor(tiles: Rect[], phase: 'out' | 'in'): Motion[] {
 /**
  * Draw one panel. `visible` is 1 when fully in place and 0 when fully gone.
  * `seam` is the gap (px) between the two halves of a centre-anchored panel.
+ * `keepOut` (px) is the corner logo, which a graphic is kept clear of.
  */
 export function drawPanel(
   ctx: CanvasRenderingContext2D,
@@ -48,6 +49,7 @@ export function drawPanel(
   motion: Motion,
   visible: number,
   seam = 0,
+  keepOut?: Box,
 ) {
   if (!img || visible <= 0) return;
   // Photos always cover the tile, centre-cropped: panels never show gaps. Matching
@@ -64,7 +66,7 @@ export function drawPanel(
     ctx.beginPath();
     ctx.rect(clip.x, clip.y, clip.w, clip.h);
     ctx.clip();
-    if (img.graphic) drawGraphic(ctx, img, rect, ox, oy);
+    if (img.graphic) drawGraphic(ctx, img, rect, ox, oy, keepOut);
     else ctx.drawImage(img.source, dx + ox, dy + oy, d.w, d.h);
     ctx.restore();
   };

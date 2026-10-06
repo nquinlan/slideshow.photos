@@ -8,7 +8,7 @@
  * draw such SVGs to a canvas.
  */
 import { imageSize } from 'image-size';
-import type { GraphicInfo } from '../formats/types';
+import type { Box, GraphicInfo } from '../formats/types';
 import type { CollectionGraphics, Graphic, GraphicType } from '../db/db';
 import { isHeicBytes } from '../pipeline/processor';
 import { orientedSize } from '../pipeline/sizing';
@@ -135,6 +135,24 @@ export function toGraphicInfo(g: Graphic): GraphicInfo {
     scalePct: g.scalePct,
     fullScreen: g.fullScreen,
   };
+}
+
+/**
+ * The area graphics keep clear of while a corner logo shows: the logo's box
+ * (CSS px, relative to the stage), grown by the logo's own 2.5vmin margin and
+ * stretched to the screen corner it sits in, as fractions of the stage.
+ */
+export function cornerKeepOut(logo: Box, stage: { width: number; height: number }): Box | null {
+  const { width: W, height: H } = stage;
+  if (W <= 0 || H <= 0 || logo.w <= 0 || logo.h <= 0) return null;
+  const gap = 0.025 * Math.min(W, H);
+  const right = logo.x + logo.w / 2 > W / 2;
+  const bottom = logo.y + logo.h / 2 > H / 2;
+  const x0 = right ? Math.max(0, logo.x - gap) : 0;
+  const x1 = right ? W : Math.min(W, logo.x + logo.w + gap);
+  const y0 = bottom ? Math.max(0, logo.y - gap) : 0;
+  const y1 = bottom ? H : Math.min(H, logo.y + logo.h + gap);
+  return { x: x0 / W, y: y0 / H, w: (x1 - x0) / W, h: (y1 - y0) / H };
 }
 
 /** Graphics enabled for a collection, with shares as fractions (scaled down if they sum past the cap). */

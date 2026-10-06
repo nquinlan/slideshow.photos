@@ -17,6 +17,7 @@ import { effectiveFormat } from '../formats';
 import { shuffledOrder } from '../formats/shared';
 import {
   resolveSettings,
+  type Box,
   type FormatInstance,
   type GraphicInfo,
   type GraphicsSource,
@@ -52,6 +53,8 @@ export interface EngineOptions {
   /** Photo to start on (by id); defaults to the first in playlist order. */
   startPhotoId?: string;
   lookahead?: number;
+  /** Area the corner logo covers (fractions of the viewport); graphics stay clear of it. */
+  keepOut?: Box | null;
   /** Enabled graphics (logos, sponsors) with their share of steps, 0..1. */
   graphics?: { info: GraphicInfo; share: number }[];
   loadGraphic?(id: string): Promise<Blob | undefined>;
@@ -66,6 +69,8 @@ export interface EngineOptions {
 export { shuffledOrder };
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
+const sameBox = (a: Box | null | undefined, b: Box | null | undefined) =>
+  a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 
 export class SlideshowEngine {
   private order: number[] = [];
@@ -212,11 +217,11 @@ export class SlideshowEngine {
         return;
       }
     } else if (this.scene) {
-      this.scene.setRenderOptions({ fit: settings.fit, backdrop: settings.backdrop });
+      this.scene.setRenderOptions(this.render());
       this.scene.setTiming(this.timing());
       return;
     } else {
-      this.format?.setRenderOptions({ fit: settings.fit, backdrop: settings.backdrop });
+      this.format?.setRenderOptions(this.render());
     }
     if (!this.scene) {
       this.preload();
@@ -228,6 +233,13 @@ export class SlideshowEngine {
   setGraphics(items: { info: GraphicInfo; share: number }[]) {
     this.graphicItems = items;
     this.scheduler = new GraphicScheduler(items, this.o.random);
+  }
+
+  /** The corner logo appeared, moved, resized or went away: redraw graphics clear of it. */
+  setKeepOut(area: Box | null) {
+    if (sameBox(area, this.o.keepOut)) return;
+    this.o.keepOut = area;
+    (this.scene ?? this.format)?.setRenderOptions(this.render());
   }
 
   destroy() {
@@ -243,6 +255,10 @@ export class SlideshowEngine {
 
   private emit() {
     if (!this.destroyed) this.o.onState(this.state);
+  }
+
+  private render() {
+    return { fit: this.o.settings.fit, backdrop: this.o.settings.backdrop, keepOut: this.o.keepOut };
   }
 
   private timing() {
@@ -285,7 +301,7 @@ export class SlideshowEngine {
     const ctx = {
       canvas: this.o.canvas,
       viewport: this.o.viewport,
-      render: { fit: this.o.settings.fit, backdrop: this.o.settings.backdrop },
+      render: this.render(),
     };
     if (f.kind === 'scene') {
       this.scenePosition = 0;
